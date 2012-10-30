@@ -28,15 +28,38 @@
 #include <fcntl.h>
 #include <time.h>
 #include <termios.h>	/* POSIX terminal control definitions */
+#include <signal.h>
+#include <sys/ioctl.h>
 
 #define SERIAL_PORT "/dev/ttyAMA0"
+#define BUF_SIZE 255
+
+/* Definition of global variables, used to store the current configuration
+ * of the serial port, to be able to restore it */
+static int global_fd = -1;
+static struct termios old_settings;
+
+/* restores the terminal settings to the state before the program
+ * made any changes and terminates the program */
+static void xbee_exit(bool reset)
+{
+	if (reset) {
+		tcflush(global_fd, TCIFLUSH);
+		tcsetattr(global_fd, TCSANOW, &old_settings);
+	}
+	close(global_fd);
+	exit(-1);
+}
 
 /* try to open the serial port for communication with the xbee device
  * @device: NULL terminated string, defining the tty device to use
  * @ret_val:	0 on success, -1 on error */
 int open_serial(const char* device) {
 	int fd = -1; 
-	fd = open(device, O_RDWR | O_NOCTTY);
+	/* O_RDWR - read write mode
+	 * O_NOCTTY - this program isn't the controlling terminal
+	 * O_NDELAY - ignore status of DCD signal line */ 
+	fd = open(device, O_RDWR | O_NOCTTY | O_NDELAY);
 	if (fd < 0)
 		fprintf(stderr, "Unable to open %s", device);
 	return fd;
@@ -46,7 +69,7 @@ int open_serial(const char* device) {
  * @fd:		file descriptor for a terminal device
  * @ret_val:	0 on success, -1 on error */
 int setup_serial(int fd) {
-	struct termios settings, old_settings;
+	struct termios settings;
 
 	/* Get the current settings for the port */
 	if (tcgetattr(fd, &old_settings)) {
@@ -56,30 +79,29 @@ int setup_serial(int fd) {
 	settings = old_settings;
 	
 	// setup baudrate
-	settings.c_cflag &= ~CBAUD;
 	settings.c_cflag |= B9600;
-
 	// Ignore modem status lines & allow input to be received
 	settings.c_cflag |= (CLOCAL | CREAD);
-	
-	// disable parity
-	settings.c_cflag &= ~PARENB;
-
-	// one stop bit
-	settings.c_cflag &= ~CSTOPB;
-
 	// data size set to 8bits
-	settings.c_cflag &= ~CSIZE;
 	settings.c_cflag |= CS8;
-
-	// disable flow control
+	// disable flow control (Raspberry UART doesn't offer control lines)
 	settings.c_cflag &= ~CRTSCTS;
+	
+	// ignore chars with parity errors & ignore BREAK condition
+	settings.c_iflag = IGNPAR | IGNBRK;
 
+	// output & local flags are irrelevant
+	settings.c_oflag = 0;
+	settings.c_lflag = 0;
+
+	// set terminal I/O mode:  start timer when read() is called,
+	// read() returns if at least 1 byte is read, or timer runs out
 	settings.c_cc[VMIN] = 0;
 	settings.c_cc[VTIME] = 1; // 0.1s
 
 	/* Set the new settings */
 	/* TSCNOW -> change occurs immediately */
+	tcflush(fd, TCIOFLUSH);
 	if (tcsetattr(fd, TCSANOW, &settings) < 0) {
 		perror("tcsetattr: ");
 		return -1;
@@ -87,47 +109,74 @@ int setup_serial(int fd) {
 	return fd;
 }
 
+/* retrieve all bytes available in the serial buffer */
+int xbee_receive(int fd, char *buf) {
+	int bytes_available;
+
+	sleep(2);
+	memset(buf, 0, BUF_SIZE * sizeof(char));
+	ioctl(fd, FIONREAD, &bytes_available);
+	//printf("IOCTL: %i bytes available in the buffer\n", bytes_available);
+	bytes_available = read(fd, buf, BUF_SIZE);
+	buf[bytes_available] = '\0';
+	//printf("read fct: %i bytes available in the buffer\n", bytes_available);
+	return bytes_available;
+}
+
+/* a signal handler for the ctrl+c interrupt, in order to end the program
+ * gracefully (restoring terminal settings and closing fd) */
+static void signal_handler_interrupt(int signum)
+{
+	fprintf(stderr, "Interrupt received: Terminating program\n");
+	xbee_exit(true);
+}
+
 /* main control loop of the program */
 int main(int argc, char **argv) {
-	char buf[64];
+	int fd = -1;
+	char buf[BUF_SIZE];
 	int byte_cnt;
+
+	/* register signal handler for interrupt signal, to exit gracefully */
+	signal(SIGINT, signal_handler_interrupt);
 
 	/* try to open the serial port and configure it to be compatible
 	 * with the xbee port */
-	int fd = open_serial(SERIAL_PORT);
+	fd = open_serial(SERIAL_PORT);
+	global_fd = fd;
 	if (fd < 0)
-		exit(-1);
+		xbee_exit(false);
 	if (setup_serial(fd) < 0)
-		exit(-1);
+		xbee_exit(true);
 
 	/* set the xbee into command mode */
 	strcpy(&buf[0], "+++");
-	write(fd, &buf, 3);
-	printf("setting xbee into command mode\n"); 
-	//sleep(1);
-	byte_cnt = read(fd, &buf, 2);
-	buf[byte_cnt] = '\0';
-	printf("read %d bytes from serial: %s\n", byte_cnt, buf);
+	byte_cnt = write(fd, &buf, 3);
+	printf("setting xbee into command mode, wrote %i bytes\n", byte_cnt); 
+	byte_cnt = xbee_receive(fd, buf);
 
-	/* try to read the PAN ID */
-	strcpy(&buf[0], "ATBD");
-	//buf[4] = 0x0d; //CR
-	write(fd, &buf, 4);
-	//sleep();
-	byte_cnt = read(fd, &buf, 1);
-	buf[byte_cnt] = '\0';
-	printf("ATBD: %s, byte cnt=%d\n", buf, byte_cnt);
+	/* read Baud rate setting */
+	strcpy(&buf[0], "ATBD\r");
+	write(fd, &buf, 5);
 	
-	/* try to read the PAN ID */
-	//strcpy(&buf[0], "ATID");
-	//buf[4] = 0x0d; //CR
-	//write(fd, &buf, 4);
-	//sleep(2);
-	//byte_cnt = read(fd, &buf, 4);
-	//buf[byte_cnt] = '\0';
-	//printf("PAN Id: %s, byte cnt=%d\n", buf, byte_cnt);
+	byte_cnt = xbee_receive(fd, buf);
+	printf("\nBAUD: ");
+	for (int i=0; i<byte_cnt; i++) {
+		printf("%c", buf[i]);
+	}
+	
+	/* read PAN ID */
+	strcpy(&buf[0], "ATID\r");
+	write(fd, &buf, 5);
+	byte_cnt = xbee_receive(fd, buf);
+
+	printf("\nPAN ID: ");
+	for (int i=0; i<byte_cnt; i++) {
+		printf("%c", buf[i]);
+	}
+	printf("\n");
 
 	/* close the serial port and exit the program */
-	close(fd);
+	xbee_exit(true);
 	return 1;
 }
