@@ -3,13 +3,13 @@ CC = gcc
 #Define the compiler options for this project
 CFLAGS += -Wall -O3 -std=gnu99
 #Define the libraries that are used for this project
-LDLIBS +=
+LDLIBS += -lgbee
 
 #Define the output target
-TARGET = xbee
+TARGET = gbee_test
 
 #All source packages
-SOURCES = ./xbee.c
+SOURCES = ./gbee_test.c
 VPATH :=
 
 #Define all object files
