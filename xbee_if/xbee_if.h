@@ -23,14 +23,33 @@
 #include <string>
 #include <inttypes.h>
 
+enum sensor_type {
+	TEMP,
+	ACC,
+	GPS,
+	HEART
+};
+
 class XBee_config {
 public:
-	XBee_config(std::string port, bool mode, const uint8_t pan[8]);
+	XBee_config(std::string port, bool mode, const uint8_t unique_id,
+	const uint8_t pan[2]);
 
 	std::string serial_port;
 	bool coordinator_mode;
-	uint8_t pan_id[8];
+	uint8_t pan_id[2];
+	uint8_t unique_id;
 	uint32_t baud_rate;
+};
+
+class XBee_measurement {
+public:
+	XBee_measurement(enum sensor_type, const uint8_t* data, uint16_t length );
+	~XBee_measurement();
+	enum sensor_type type;
+	uint8_t* data;
+	uint16_t length;
+
 };
 
 class XBee {
@@ -40,6 +59,9 @@ public:
 	void xbee_init();
 	void xbee_status();
 	void xbee_print_at_value(std::string at);
+	void xbee_send_measurement(XBee_measurement& measurement);
+	void xbee_receive_measurement();
+	int xbee_bytes_available();
 private: 
 	void xbee_start_network();
 	GBeeFrameData& xbee_receive_and_print(uint32_t timeout, uint16_t *length);

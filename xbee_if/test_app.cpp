@@ -23,16 +23,22 @@
 #include <unistd.h>
 
 int main(int argc, char **argv) {
-	uint8_t pan_id[8] = {0x00, 0x00, 0x00, 0x00, 0xFE, 0xFE, 0xFE, 0x00};
-	XBee_config config("/dev/ttyUSB0", true, pan_id);
-	
+	uint8_t pan_id[2] = {0xAB, 0xDD};
+	uint8_t unique_id = 1;
+	XBee_config config("/dev/ttyUSB0", true, unique_id, pan_id);
+
 
 	XBee interface(config);
 	interface.xbee_init();
+
 	for (int i=0; i <= 20; i++) {
 		sleep(1);
+		if (interface.xbee_bytes_available() > 0) {
+			interface.xbee_receive_measurement();
+		}
 		interface.xbee_status();
 	}
+
 	interface.xbee_print_at_value("MY");
 	interface.xbee_print_at_value("OP");
 	interface.xbee_print_at_value("ID");
