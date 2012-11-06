@@ -24,7 +24,7 @@
 
 int main(int argc, char **argv) {
 	uint8_t pan_id[8] = {0x00, 0x00, 0x00, 0x00, 0xFE, 0xFE, 0xFE, 0x00};
-	XBee_config config("/dev/ttyUSB0", false, pan_id);
+	XBee_config config("/dev/ttyUSB0", true, pan_id);
 	
 
 	XBee interface(config);
@@ -33,5 +33,11 @@ int main(int argc, char **argv) {
 		sleep(1);
 		interface.xbee_status();
 	}
+	interface.xbee_print_at_value("MY");
+	interface.xbee_print_at_value("OP");
+	interface.xbee_print_at_value("ID");
+	interface.xbee_print_at_value("OI");
+	interface.xbee_print_at_value("SC");
+
 	return 0;
 }

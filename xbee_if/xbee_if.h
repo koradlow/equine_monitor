@@ -39,6 +39,7 @@ public:
 	virtual ~XBee();
 	void xbee_init();
 	void xbee_status();
+	void xbee_print_at_value(std::string at);
 private: 
 	void xbee_start_network();
 	GBeeFrameData& xbee_receive_and_print(uint32_t timeout, uint16_t *length);

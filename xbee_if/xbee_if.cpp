@@ -19,6 +19,7 @@
 #include "xbee_if.h"
 #include <gbee.h>
 #include <gbee-util.h>
+#include <unistd.h>
 
 
 XBee_config::XBee_config(std::string port, bool mode, const uint8_t pan[8]):
@@ -42,15 +43,16 @@ void XBee::xbee_init() {
 	GBeeError error_code;
 	GBeeMode mode;
 
-	//gbee_handle = gbeeCreate(config.serial_port.c_str());
-	gbee_handle = gbeeCreate("/dev/ttyUSB0");
+	gbee_handle = gbeeCreate(config.serial_port.c_str());
 	if (!gbee_handle) {
 		printf("Error creating handle for XBee device\n");
 		// TODO: throw exception instead of exiting
 		exit(-1);
 	}
 	sleep(1);
+	
 	/* check if device is operating in API mode */
+	/*
 	error_code = gbeeGetMode(gbee_handle, &mode); 
 	if (error_code != GBEE_NO_ERROR)
 		printf("Error getting XBee mode: %s\n", gbeeUtilCodeToString(error_code));
@@ -61,6 +63,7 @@ void XBee::xbee_init() {
 	} else if (mode == GBEE_MODE_API) {
 		printf("Xbee module in API mode\n");
 	}
+	*/
 }
 
 void XBee::xbee_start_network() {
@@ -68,6 +71,8 @@ void XBee::xbee_start_network() {
 	uint16_t length;
 	uint8_t value[64];
 
+	printf("Setting constant parameters for new Network \n"); 
+	
 	/* set the 64bit PAN ID */
 	error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("ID"), &config.pan_id[0], 8);
 	printf("Set 64bit PAN ID: %s\n", gbeeUtilCodeToString(error_code));
@@ -175,6 +180,40 @@ void XBee::xbee_status() {
 		default:
 			printf("Status: undefined status received: %02x\n", at_frame->value[0]);
 		}
+	}
+}
+
+/* sends out the requested command, waits for the answer of the module and prints the value */
+void XBee::xbee_print_at_value(std::string at){
+	GBeeFrameData frame;
+	GBeeError error_code;
+	uint16_t length;
+	uint32_t timeout = 250;
+	static uint8_t frame_id = 1;
+	
+	/* query the current network status and print the response in cleartext */
+	frame_id = (++frame_id) % 255;	/*give each frame a unique ID */
+	error_code = gbeeSendAtCommand(gbee_handle, frame_id, xbee_at_cmd(at.c_str()), NULL, 0);
+	if (error_code != GBEE_NO_ERROR)
+		printf("Error sending XBee AT (%s) command : %s\n", at.c_str(), gbeeUtilCodeToString(error_code));
+	
+	/* receive the response and print the value */
+	error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
+	if (error_code != GBEE_NO_ERROR)
+		printf("Error receiving XBee AT (%s) response: %s\n", at.c_str(), gbeeUtilCodeToString(error_code));
+	
+	/* check if the received frame is a AT Command Response frame */
+	if (frame.ident == 0x88) {
+		GBeeAtCommandResponse *at_frame = (GBeeAtCommandResponse*) &frame;
+		if (at_frame->frameId != frame_id) {
+			printf("Error: Frame IDs not matching\n");
+			return;
+		}
+		printf("Received AT (%c%c) response with length: %d, status: %d and value: ", 
+		at_frame->atCommand[0], at_frame->atCommand[1],length, at_frame->status);
+		for (int i = 0; i < length; i++)
+			printf("%02x",at_frame->value[i]);
+		printf("\n");
 	}
 }
 
