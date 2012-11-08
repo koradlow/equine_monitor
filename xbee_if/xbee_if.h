@@ -44,8 +44,7 @@ public:
 
 class XBee_measurement {
 public:
-	XBee_measurement(enum sensor_type, const uint8_t* data, uint16_t length );
-	~XBee_measurement();
+	XBee_measurement(enum sensor_type, const uint8_t* data, uint16_t length);
 	enum sensor_type type;
 	uint8_t* data;
 	uint16_t length;
@@ -57,9 +56,9 @@ public:
 	XBee(XBee_config& config);
 	virtual ~XBee();
 	void xbee_init();
-	void xbee_status();
+	uint8_t xbee_status();
 	void xbee_print_at_value(std::string at);
-	void xbee_send_measurement(XBee_measurement& measurement);
+	uint8_t xbee_send_measurement(XBee_measurement& measurement);
 	void xbee_receive_measurement();
 	int xbee_bytes_available();
 private: 
