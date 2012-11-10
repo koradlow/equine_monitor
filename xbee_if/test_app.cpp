@@ -25,20 +25,30 @@
 int main(int argc, char **argv) {
 	uint8_t pan_id[2] = {0xAB, 0xDD};
 	uint8_t unique_id = 2;
-	XBee_config config("/dev/ttyUSB0", false, unique_id, pan_id);
+	XBee_config config("/dev/ttyUSB0", false, unique_id, pan_id, 750);
 	/* transmission test data */
-	uint8_t data[2] = {123, 211};
-	XBee_measurement measurement(TEMP, data, 2);
+	uint8_t data[2] = {0xAB, 0xCD};
+	XBee_measurement measurement1(TEMP, data, 2);
+	uint8_t data2[3] = {0x01, 0x23, 0x45};
+	XBee_measurement measurement2(HEART, data2, 3);
 
 	XBee interface(config);
 	interface.xbee_init();
 
-	for (int i=0; i <= 10; i++) {
+	interface.xbee_status();
+	printf("\n");
+	for (int i=0; i < 1; i++) {
 		sleep(2);
-		interface.xbee_send_measurement(measurement);
-		interface.xbee_status();
+		printf("Sending measurement type: %02x, values: %02x, %02x, length: %02x\n",
+		measurement1.type, measurement1.data[0], measurement1.data[1], measurement1.length+1);
+		interface.xbee_send_measurement(measurement1);
+		sleep(2);
+		printf("Sending measurement type: %02x, value: %02x, %02x, %02x, length: %02x\n",
+		measurement2.type, measurement2.data[0], measurement2.data[1], measurement2.data[2], measurement2.length+1);
+		interface.xbee_send_measurement(measurement2);
 	}
 
+	printf("\n");
 	interface.xbee_print_at_value("MY"); 	// own address
 	interface.xbee_print_at_value("ID");	// extended PAN ID
 	interface.xbee_print_at_value("OP");	// operating extended PAN ID
@@ -47,7 +57,6 @@ int main(int argc, char **argv) {
 	interface.xbee_print_at_value("DL");	// destination Address low
 	interface.xbee_print_at_value("SM");	// sleep mode
 	interface.xbee_print_at_value("MP");	// 16bit Parent Address
-	interface.xbee_print_at_value("ND");	// Node discovery
-
+	
 	return 0;
 }

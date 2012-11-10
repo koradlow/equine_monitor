@@ -26,10 +26,11 @@
 /* constructor of the XBee_config class, which is used to provide access
  * to configuration options. It is a raw data container at the moment */
 XBee_config::XBee_config(std::string port, bool mode, const uint8_t unique_id,
-			const uint8_t pan[2]):
+			const uint8_t pan[2], uint32_t timeout):
 	serial_port(port),
 	coordinator_mode(mode),
-	unique_id(unique_id) {
+	unique_id(unique_id),
+	timeout(timeout) {
 		memcpy(pan_id, pan, 2);
 }
 
@@ -40,7 +41,7 @@ XBee_measurement::XBee_measurement(enum sensor_type type, const uint8_t* data,
 	type(type),
 	length(length)
 	{
-		data = new uint8_t[length];
+		this->data = new uint8_t[length];
 		memcpy(this->data, data, length);
 
 }
@@ -83,7 +84,7 @@ void XBee::xbee_start_network() {
 	error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("ID"),
 	&config.pan_id[0], 2);
 	printf("Set 64bit PAN ID: %s\n", gbeeUtilCodeToString(error_code));
-	xbee_receive_and_print(500, &length);
+	xbee_receive_and_print(&length);
 	
 	/* enable sleep mode for end devices, disable for controllers */
 	if (config.coordinator_mode) {
@@ -98,7 +99,7 @@ void XBee::xbee_start_network() {
 	}
 	printf("%s sleep mode: %s\n", (config.coordinator_mode)?
 	"Disabled" : "Enabled", gbeeUtilCodeToString(error_code));
-	xbee_receive_and_print(500, &length);
+	xbee_receive_and_print(&length);
 
 	/* if configuring end device, set the destination address registers
 	 * to the default address of the coordinator */
@@ -106,23 +107,23 @@ void XBee::xbee_start_network() {
 		value[0] = 0x00; 
 		error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("DH"), &value[0], 1);
 		printf("Set DH Address: %s\n", gbeeUtilCodeToString(error_code)); 
-		xbee_receive_and_print(500, &length);
+		xbee_receive_and_print(&length);
 		error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("DL"), &value[0], 1); 
 		printf("Set DL Address: %s\n", gbeeUtilCodeToString(error_code)); 
-		xbee_receive_and_print(500, &length);
+		xbee_receive_and_print(&length);
 	}
 
 	/* write the changes to the internal memory of the xbee module */
 	error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("WR"), &value[0], 0);
 	printf("Write settings to memory: %s\n", gbeeUtilCodeToString(error_code)); 
 	// wait for 'OK'
-	xbee_receive_and_print(500, &length);
+	xbee_receive_and_print(&length);
 
 	/* apply the queued changes */
 	error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("AC"), &value[0], 0);
 	printf("Apply queued changes: %s\n", gbeeUtilCodeToString(error_code)); 
 	// wait for 'Associated'
-	xbee_receive_and_print(500, &length);
+	xbee_receive_and_print(&length);
 }
 
 /* xbee_status requests, decodes and prints the current status of the XBee module */
@@ -140,7 +141,7 @@ uint8_t XBee::xbee_status() {
 		return status;
 	}
 	/* wait for the response to the command */
-	frame = xbee_receive_and_print(10000, &length);
+	frame = xbee_receive_and_print(&length);
 	if (frame.ident == GBEE_AT_COMMAND_RESPONSE) {
 		GBeeAtCommandResponse *at_frame = (GBeeAtCommandResponse*) &frame;
 		status = at_frame->value[0];
@@ -155,7 +156,8 @@ void XBee::xbee_print_at_value(std::string at){
 	GBeeFrameData frame;
 	GBeeError error_code;
 	uint16_t length;
-	uint32_t timeout = 250;
+	uint16_t payload;
+	uint32_t timeout = config.timeout;
 	static uint8_t frame_id = 1;
 	
 	memset(&frame, 0, sizeof(frame));
@@ -175,13 +177,14 @@ void XBee::xbee_print_at_value(std::string at){
 		/* check if the received frame is a AT Command Response frame */
 		if (frame.ident == GBEE_AT_COMMAND_RESPONSE) {
 			GBeeAtCommandResponse *at_frame = (GBeeAtCommandResponse*) &frame;
+			payload = length - 5;	/* 5 bytes overhead */
 			if (at_frame->frameId != frame_id) {
-				printf("Error: Frame IDs not matching\n (%i : %i)",
+				printf("Error: Frame IDs not matching\n (%i : %i)\n",
 				frame_id, at_frame->frameId);
 			}
 			printf("Received AT (%c%c) response with length: %d, status: %d and value: ", 
 			at_frame->atCommand[0], at_frame->atCommand[1],length, at_frame->status);
-			for (int i = 0; i < length; i++)
+			for (int i = payload-1; i >= 0; i--)
 				printf("%02x",at_frame->value[i]);
 			printf("\n");
 		}
@@ -199,7 +202,7 @@ uint8_t XBee::xbee_send_measurement(XBee_measurement& measurement) {
 	uint8_t *buffer = new uint8_t[measurement.length+1];
 	uint8_t frame_id = 0x02;
 	uint16_t length;
-	uint32_t timeout = 500;
+	uint32_t timeout = config.timeout;
 	memset(&frame, 0, sizeof(frame));
 	
 	/* copy the msg type into the first byte of the buffer, and append
@@ -238,7 +241,8 @@ void XBee::xbee_receive_measurement() {
 	GBeeFrameData frame;
 	GBeeError error_code;
 	uint16_t length = 0;
-	uint32_t timeout = 500;
+	uint16_t payload = 0;
+	uint32_t timeout = config.timeout;
 	memset(&frame, 0, sizeof(frame));
 
 	/* try to receive a message */
@@ -251,9 +255,11 @@ void XBee::xbee_receive_measurement() {
 	/* check if the received frame is a RxPacket frame */
 	if (frame.ident == GBEE_RX_PACKET) {
 		GBeeRxPacket *rx_frame = (GBeeRxPacket*) &frame;
+		payload = length - 12;	/* 12 bytes of overhead data */
 		printf("Received Measurement message from Node %04x\n", rx_frame->srcAddr16);
 		printf("SH: %08x, SL: %08x\n", rx_frame->srcAddr64h, rx_frame->srcAddr64l);
-		printf("Sensor type: %d, length: %d\n", rx_frame->data[0], length);
+		printf("Sensor type: %d, length: %d\n", rx_frame->data[0], payload);
+		printf("Values: %02x, %02x\n", rx_frame->data[1], rx_frame->data[2]);
 	}
 	else {
 		printf("Received unexpected message frame: ident=%02x\n",frame.ident);
@@ -270,10 +276,12 @@ int XBee::xbee_bytes_available() {
 	return bytes_available;
 }
 
-GBeeFrameData& XBee::xbee_receive_and_print(uint32_t timeout, uint16_t *length) {
+GBeeFrameData& XBee::xbee_receive_and_print(uint16_t *length) {
 	static GBeeFrameData frame;
 	GBeeError error_code;
+	uint32_t timeout = config.timeout;
 	
+	memset(&frame, 0, sizeof(GBeeFrameData));
 	error_code = gbeeReceive(gbee_handle, &frame, length, &timeout);
 	if (error_code == GBEE_NO_ERROR) {
 		//printf("Received package with length %d and type %02x\n", *length, frame.ident);

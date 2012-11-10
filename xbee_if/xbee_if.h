@@ -33,13 +33,14 @@ enum sensor_type {
 class XBee_config {
 public:
 	XBee_config(std::string port, bool mode, const uint8_t unique_id,
-	const uint8_t pan[2]);
+	const uint8_t pan[2], uint32_t timeout);
 
 	std::string serial_port;
 	bool coordinator_mode;
 	uint8_t pan_id[2];
 	uint8_t unique_id;
 	uint32_t baud_rate;
+	uint32_t timeout;
 };
 
 class XBee_measurement {
@@ -63,7 +64,7 @@ public:
 	int xbee_bytes_available();
 private: 
 	void xbee_start_network();
-	GBeeFrameData& xbee_receive_and_print(uint32_t timeout, uint16_t *length);
+	GBeeFrameData& xbee_receive_and_print(uint16_t *length);
 	uint8_t* xbee_at_cmd(const std::string at_cmd_str);
 	XBee_config config;
 	GBee *gbee_handle;
