@@ -22,7 +22,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 
-
+/** XBee_Config Class implementation */
 /* constructor of the XBee_config class, which is used to provide access
  * to configuration options. It is a raw data container at the moment */
 XBee_config::XBee_config(std::string port, bool mode, const uint8_t unique_id,
@@ -43,9 +43,168 @@ XBee_measurement::XBee_measurement(enum sensor_type type, const uint8_t* data,
 	{
 		this->data = new uint8_t[length];
 		memcpy(this->data, data, length);
-
 }
 
+/** XBee_Message Class implementation */
+/* constructor for a XBee message - used to create messages for transmission */
+XBee_Message::XBee_Message(enum message_type type, const uint8_t *payload, uint16_t length):
+		type(type),
+		payload_len(length),
+		message_part(1),	/* message part numbers start with 1 */
+		message_complete(true)	/* messages created by this constructor
+					 * are complete at construction time */
+{
+	/* calculate the number of parts required to transmit this message */
+	message_part_cnt = payload_len / (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH) + 1;
+
+	/* allocate memory to copy the payload into the object */
+	this->payload = new uint8_t[payload_len];
+	memcpy(this->payload, payload, payload_len);
+
+	/* allocate memory for the message buffer */
+	if (message_part_cnt > 1) {
+		/* message has to be split into multiple parts, but each
+		 * single part will not be larger thatn the maximal msg lengh */
+		this->message_buffer = new uint8_t[XBEE_MSG_LENGTH];
+	} else {
+		/* message fits into one transmission */
+		this->message_buffer = new uint8_t[length + MSG_HEADER_LENGTH];
+	}
+}
+
+/* constructor for XBee_messages - used to deserialize objects after reception */
+XBee_Message::XBee_Message(const uint8_t *message):
+		message_buffer(NULL),	/* this message type will not use the buffer */
+		type(static_cast<message_type>(message[MSG_TYPE])),
+		payload_len(message[MSG_PAYLOAD_LENGTH]),
+		message_part(message[MSG_PART]),
+		message_part_cnt(message[MSG_PART_CNT])
+{
+	/* allocate memory to copy the payload into the object */
+	printf("payload len: %u\n", payload_len);
+	this->payload = new uint8_t[payload_len];
+	memcpy(this->payload, &message[MSG_HEADER_LENGTH], payload_len);
+
+	/* determine if the message is complete, or just a part of a longer
+	 * message */
+	if (message_part_cnt == 1)
+		message_complete = true;
+	else 
+		message_complete = false;
+}
+
+/* constructor for a empty XBee message - used to create messages for appending data */
+XBee_Message::XBee_Message():
+	message_buffer(NULL),
+	payload(NULL),
+	payload_len(0),
+	message_part(0),
+	message_part_cnt(0),
+	message_complete(false)
+{}
+
+XBee_Message::~XBee_Message() {
+	if (payload)
+		delete[] payload;
+	if (message_buffer)
+		delete[] message_buffer;
+}
+
+uint8_t* XBee_Message::get_payload(uint16_t *length) {
+	*length = payload_len;
+	return payload;
+}
+
+enum message_type XBee_Message::get_type() {
+	return type;
+}
+
+bool XBee_Message::is_complete() {
+	return message_complete;
+}
+
+/* reconstructs messages that consist of multiple parts, return true if
+ * the message was successfully appended and false, if the operation failed
+ * due to failed validity check */
+bool XBee_Message::append_msg(const XBee_Message &msg) {
+	uint8_t *new_payload;
+	uint16_t new_payload_len;
+	
+	/* check if it's possible to append the given message */
+	if (msg.message_part != message_part+1)
+		return false;
+	
+	/* given message passed validity check -> allocate memory */
+	new_payload_len = payload_len + msg.payload_len;
+	new_payload = new uint8_t[new_payload_len];
+	
+	/* copy the existing payload into the new memory space */
+	memcpy(new_payload, payload, payload_len);
+	/* append the new payload to the memory */
+	memcpy(&new_payload[payload_len], msg.payload, msg.payload_len);
+	
+	/* update internal variables to match new data */
+	if (payload)
+		delete[] payload;
+	payload = new_payload;
+	payload_len += msg.payload_len;
+	message_part += 1;
+	
+	/* determine if the message is complete */
+	if (message_part == message_part_cnt)
+		message_complete = true;
+
+	return true;
+}
+
+/* returns a pointer to a message buffer that includes a header and a payload.
+ * The message_buffer is constructed on the fly into a preallocated and fixed
+ * memory space.
+ * The content of the memory space is overwritten each time this function is called */
+uint8_t* XBee_Message::get_msg(uint8_t part = 1) {
+	uint16_t length = payload_len;
+	uint16_t overhead_len;
+	uint16_t offset = 0;
+
+	if (message_part_cnt > 1) {
+		/* calculate the length of the payload in last message part */
+		overhead_len = length - (message_part_cnt - 1) * (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH);
+		/* payload length depends on the part number of the message -> 
+		 * last message part is an exception */
+		length = (part == message_part_cnt)? overhead_len : (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH);
+		/* offset in the payload data based on message part */
+		offset = (part - 1) * (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH);
+	}
+	/* create the header of the message */
+	message_buffer[MSG_TYPE] = static_cast<uint8_t>(type);
+	message_buffer[MSG_PART] = part;
+	message_buffer[MSG_PART_CNT] = message_part_cnt;
+	message_buffer[MSG_PAYLOAD_LENGTH] = length;
+	/* copy payload into message body */
+	memcpy(&message_buffer[MSG_HEADER_LENGTH], &payload[offset], length);
+
+	return message_buffer;
+}
+
+/* returns the length of the requested part of the message (including header) */
+uint16_t XBee_Message::get_msg_len(uint8_t part = 1) {
+	/* message consists of one part? */
+	if (message_part_cnt == 1)
+		return (MSG_HEADER_LENGTH + payload_len);
+
+	/* message consists of multiple parts, part in the middle requested.
+	 * Parts in the middle always have the maximal possible message length
+	 * to make best use of bandwidth */
+	if (message_part_cnt != part)
+		return XBEE_MSG_LENGTH;
+
+	/* message consists of multiple parts, last part requested */
+	uint16_t transmitted_len = (message_part_cnt - 1) * (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH);
+	return MSG_HEADER_LENGTH + payload_len - transmitted_len;
+}
+
+
+/** XBee Class implementation */
 XBee::XBee(XBee_config& config) :
 	config(config) {}
 
@@ -284,7 +443,6 @@ GBeeFrameData& XBee::xbee_receive_and_print(uint16_t *length) {
 	memset(&frame, 0, sizeof(GBeeFrameData));
 	error_code = gbeeReceive(gbee_handle, &frame, length, &timeout);
 	if (error_code == GBEE_NO_ERROR) {
-		//printf("Received package with length %d and type %02x\n", *length, frame.ident);
 		return frame;
 	}
 	printf("Error receiving package: %s\n", gbeeUtilCodeToString(error_code));
@@ -298,4 +456,31 @@ uint8_t* XBee::xbee_at_cmd(const std::string at_cmd_str) {
 	static uint8_t at_cmd[2];
 	memcpy(at_cmd, at_cmd_str.c_str(), 2);
 	return &at_cmd[0];
+}
+
+#define DTA_SIZE 400
+void XBee::xbee_test_msg() {
+	uint8_t test_data[DTA_SIZE];
+	uint8_t *payload;
+	uint16_t length;
+	uint8_t *msg_part;
+	
+	/* create random test data */
+	for (int i = 0; i < DTA_SIZE; i++) {
+		test_data[i] = rand() % 255;
+		printf("%02x ", test_data[i]);
+	}
+	printf("\n");
+	XBee_Message msg(DATA, test_data, DTA_SIZE);
+	XBee_Message msg_des;
+	
+	for (int i = 1; i <= msg.message_part_cnt; i++) {
+		XBee_Message msg_tmp(msg.get_msg(i));
+		msg_des.append_msg(msg_tmp);
+	}
+	
+	payload = msg_des.get_payload(&length);
+	for (int i = 0; i < length; i++)
+		printf("%02x ",payload[i]);
+
 }

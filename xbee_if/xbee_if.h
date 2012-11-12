@@ -23,11 +23,26 @@
 #include <string>
 #include <inttypes.h>
 
+#define XBEE_MSG_LENGTH 84
+
+#define MSG_HEADER_LENGTH 4
+/* define position of values in the header */
+#define MSG_TYPE 0x00
+#define MSG_PART 0x01
+#define MSG_PART_CNT 0x02
+#define MSG_PAYLOAD_LENGTH 0x03
+
 enum sensor_type {
 	TEMP,
 	ACC,
 	GPS,
 	HEART
+};
+
+enum message_type {
+	CONFIG,
+	TEST,
+	DATA
 };
 
 class XBee_config {
@@ -62,6 +77,7 @@ public:
 	uint8_t xbee_send_measurement(XBee_measurement& measurement);
 	void xbee_receive_measurement();
 	int xbee_bytes_available();
+	void xbee_test_msg();
 private: 
 	void xbee_start_network();
 	GBeeFrameData& xbee_receive_and_print(uint16_t *length);
@@ -70,6 +86,30 @@ private:
 	GBee *gbee_handle;
 };
 
+class XBee_Message {
+friend XBee;
+public:
+	XBee_Message(enum message_type type, const uint8_t *payload, uint16_t length);
+	XBee_Message(const uint8_t *message);
+	XBee_Message();
+	~XBee_Message();
+	uint8_t* get_payload(uint16_t *length);
+	enum message_type get_type();
+	bool is_complete();
+
+private:
+	bool append_msg(const XBee_Message &msg);
+	uint8_t* get_msg(uint8_t part);
+	uint16_t get_msg_len(uint8_t part);
+
+	uint8_t *message_buffer;
+	uint8_t *payload;
+	enum message_type type;
+	uint16_t payload_len;
+	uint8_t message_part;
+	uint8_t message_part_cnt;
+	bool message_complete;
+};
 
 
 #endif
