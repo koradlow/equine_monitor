@@ -25,24 +25,13 @@
 /** XBee_Config Class implementation */
 /* constructor of the XBee_config class, which is used to provide access
  * to configuration options. It is a raw data container at the moment */
-XBee_config::XBee_config(std::string port, bool mode, const uint8_t unique_id,
+XBee_Config::XBee_Config(std::string port, bool mode, const uint8_t unique_id,
 			const uint8_t pan[2], uint32_t timeout):
 	serial_port(port),
 	coordinator_mode(mode),
 	unique_id(unique_id),
 	timeout(timeout) {
 		memcpy(pan_id, pan, 2);
-}
-
-/* constructor of the XBee_measurement class, which is used to pass measurement
- * data into and out of the libgebee wrapper library */
-XBee_measurement::XBee_measurement(enum sensor_type type, const uint8_t* data, 
-			uint16_t length ):
-	type(type),
-	length(length)
-	{
-		this->data = new uint8_t[length];
-		memcpy(this->data, data, length);
 }
 
 /** XBee_Message Class implementation */
@@ -157,6 +146,11 @@ bool XBee_Message::append_msg(const XBee_Message &msg) {
 	return true;
 }
 
+bool XBee_Message::append_msg(const uint8_t *data) {
+	XBee_Message tmp_msg(data);
+	return append_msg(tmp_msg);
+}
+
 /* returns a pointer to a message buffer that includes a header and a payload.
  * The message_buffer is constructed on the fly into a preallocated and fixed
  * memory space.
@@ -205,7 +199,7 @@ uint16_t XBee_Message::get_msg_len(uint8_t part = 1) {
 
 
 /** XBee Class implementation */
-XBee::XBee(XBee_config& config) :
+XBee::XBee(XBee_Config& config) :
 	config(config) {}
 
 XBee::~XBee() {
@@ -218,7 +212,6 @@ void XBee::xbee_init() {
 	gbee_handle = gbeeCreate(config.serial_port.c_str());
 	if (!gbee_handle) {
 		printf("Error creating handle for XBee device\n");
-		// TODO: throw exception instead of exiting
 		exit(-1);
 	}
 	sleep(1);
@@ -310,8 +303,8 @@ uint8_t XBee::xbee_status() {
 	return status;
 }
 
-/* sends out the requested AT command, receives for the answer and prints the value */
-void XBee::xbee_print_at_value(std::string at){
+/* sends out the requested AT command, receives & returns the register value */
+void XBee::xbee_request_at_value(std::string at){
 	GBeeFrameData frame;
 	GBeeError error_code;
 	uint16_t length;
@@ -351,79 +344,91 @@ void XBee::xbee_print_at_value(std::string at){
 }
 
 /* sends the data in the measurement object to the coordinator */
-uint8_t XBee::xbee_send_measurement(XBee_measurement& measurement) {
+uint8_t XBee::xbee_send_to_coordinator(XBee_Message& msg) {
 	GBeeFrameData frame;
 	GBeeError error_code;
 	uint8_t options = 0x00;	/* 0x01 = Disable ACK, 0x20 - Enable APS
 				 * encryption (if EE=1), 0x04 = Send packet
 				 * with Broadcast Pan ID.
 				 * All other bits must be set to 0. */
-	uint8_t *buffer = new uint8_t[measurement.length+1];
 	uint8_t frame_id = 0x02;
+	uint8_t tx_status = 0xFF;	/* -> Unknown Tx Status */
+	uint8_t bcast_radius = 0;	/* -> max hops for bcast transmission */
 	uint16_t length;
+	/* coordinator can be addressed by setting the 64bit destination
+	 * address to all zeros and the 16bit address to 0xFFFE */
+	uint16_t destination = 0xFFFE;
 	uint32_t timeout = config.timeout;
 	memset(&frame, 0, sizeof(frame));
-	
-	/* copy the msg type into the first byte of the buffer, and append
-	 * the measurement data */
-	buffer[0] = measurement.type;
-	memcpy(&buffer[1], measurement.data, measurement.length);
 
-	/* coordinator can be addresses by setting the 64bit destination 
-	 * address to all zeros and the 16bit address to 0xFFFE 
-	 * address 0xFFFF is the broadcast address */
-	error_code = gbeeSendTxRequest(gbee_handle, frame_id, 0, 0,
-		0xFFFE, 0, options, buffer, measurement.length+1);
-	delete[] buffer;
-	if (error_code != GBEE_NO_ERROR)
-		printf("Error sending measurement data: %s\n",
-		gbeeUtilCodeToString(error_code));
-
-	/* check the transmission status */
-	error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
-	if (error_code != GBEE_NO_ERROR) {
-		printf("Error receiving transmission status message: error= %s\n",
-		gbeeUtilCodeToString(error_code));
-	/* check if the received frame is a TxStatus frame */
-	} else if (frame.ident == GBEE_TX_STATUS_NEW) {
-		GBeeTxStatusNew *tx_frame = (GBeeTxStatusNew*) &frame;
-		printf("Transmission status: %s\n",
-		gbeeUtilTxStatusCodeToString(tx_frame->deliveryStatus));
-		return tx_frame->deliveryStatus; 
+	/* send the message, by splitting it up into parts that have the 
+	 * correct length for transmission over ZigBee */
+	for (uint8_t i = 1; i <= msg.message_part_cnt; i++) {
+		/* send out one part of the message */
+		error_code = gbeeSendTxRequest(gbee_handle, frame_id, 0, 0,
+		destination, bcast_radius, options, msg.get_msg(i), msg.get_msg_len(i));
+		if (error_code != GBEE_NO_ERROR) {
+			printf("Error sending measurement data: %s\n",
+			gbeeUtilCodeToString(error_code));
+			tx_status = 0xFF;	/* -> Unknown Tx Status */
+			break;
+		}
+		
+		/* check the transmission status of message part*/
+		error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
+		if (error_code != GBEE_NO_ERROR) {
+			printf("Error receiving transmission status message: error= %s\n",
+			gbeeUtilCodeToString(error_code));
+			tx_status = 0xFF;	/* -> Unknown Tx Status */
+			break;
+		/* check if the received frame is a TxStatus frame */
+		} else if (frame.ident == GBEE_TX_STATUS_NEW) {
+			GBeeTxStatusNew *tx_frame = (GBeeTxStatusNew*) &frame;
+			printf("Transmission status: %s\n",
+			gbeeUtilTxStatusCodeToString(tx_frame->deliveryStatus));
+			tx_status = tx_frame->deliveryStatus; 
+		}
 	}
-	return 0xFF;	/* -> Unknown Tx Status */
+
+	return tx_status;
 }
 
-/* checks the buffer for measurement messages, decodes them and stores the
- * contained data in the database */
-void XBee::xbee_receive_measurement() {
+/* checks the buffer for (parts of) messages, puts together a complete message
+ * from the parts */
+XBee_Message* XBee::xbee_receive_message() {
 	GBeeFrameData frame;
 	GBeeError error_code;
+	XBee_Message *msg = NULL;
 	uint16_t length = 0;
-	uint16_t payload = 0;
 	uint32_t timeout = config.timeout;
 	memset(&frame, 0, sizeof(frame));
 
-	/* try to receive a message */
-	error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
-	if (error_code != GBEE_NO_ERROR) {
-		printf("Error receiving measurement message: length=%d, error= %s\n",
-		length, gbeeUtilCodeToString(error_code));
-		return;
-	}
-	/* check if the received frame is a RxPacket frame */
-	if (frame.ident == GBEE_RX_PACKET) {
-		GBeeRxPacket *rx_frame = (GBeeRxPacket*) &frame;
-		payload = length - 12;	/* 12 bytes of overhead data */
-		printf("Received Measurement message from Node %04x\n", rx_frame->srcAddr16);
-		printf("SH: %08x, SL: %08x\n", rx_frame->srcAddr64h, rx_frame->srcAddr64l);
-		printf("Sensor type: %d, length: %d\n", rx_frame->data[0], payload);
-		printf("Values: %02x, %02x\n", rx_frame->data[1], rx_frame->data[2]);
-	}
-	else {
-		printf("Received unexpected message frame: ident=%02x\n",frame.ident);
-	}
-	
+	/* try to receive a message, it might consist of several parts */
+	do {
+		error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
+		if (error_code != GBEE_NO_ERROR) {
+			printf("Error receiving message: length=%d, error= %s\n",
+			length, gbeeUtilCodeToString(error_code));
+			break;
+		}
+		/* check if the received frame is a RxPacket frame */
+		if (frame.ident == GBEE_RX_PACKET) {
+			GBeeRxPacket *rx_frame = (GBeeRxPacket*) &frame;
+			/* 12 bytes of overhead data */
+			printf("Received message from Node %04x\n", rx_frame->srcAddr16);
+			printf("SH: %08x, SL: %08x\n", rx_frame->srcAddr64h, rx_frame->srcAddr64l);
+			if (!msg)
+				msg = new XBee_Message(rx_frame->data);
+			else
+				msg->append_msg(rx_frame->data);
+		}
+		else {
+			printf("Received unexpected message frame: ident=%02x\n",frame.ident);
+			break;
+		}
+	} while (!msg->is_complete());
+
+	return msg;
 }
 
 /* checks the buffer of the serial device for available data, and returns the 
@@ -463,8 +468,7 @@ void XBee::xbee_test_msg() {
 	uint8_t test_data[DTA_SIZE];
 	uint8_t *payload;
 	uint16_t length;
-	uint8_t *msg_part;
-	
+
 	/* create random test data */
 	for (int i = 0; i < DTA_SIZE; i++) {
 		test_data[i] = rand() % 255;
@@ -475,12 +479,20 @@ void XBee::xbee_test_msg() {
 	XBee_Message msg_des;
 	
 	for (int i = 1; i <= msg.message_part_cnt; i++) {
-		XBee_Message msg_tmp(msg.get_msg(i));
-		msg_des.append_msg(msg_tmp);
+		msg_des.append_msg(msg.get_msg(i));
 	}
 	
 	payload = msg_des.get_payload(&length);
 	for (int i = 0; i < length; i++)
 		printf("%02x ",payload[i]);
-
+	printf("\n");
+	
+	/* test the util function for reading a register value */
+	GBeeError error_code;
+	uint8_t value[20];
+	uint16_t ln;
+	uint16_t max_length = 20;
+	error_code = gbeeUtilReadRegister(gbee_handle, "MY", value, &ln, max_length);
+	printf("Status: %s\n", gbeeUtilCodeToString(error_code));
+	printf("MY: %02x %02x, ln: %u\n", value[0], value[1], ln);
 }

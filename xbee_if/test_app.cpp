@@ -25,15 +25,16 @@
 int main(int argc, char **argv) {
 	uint8_t pan_id[2] = {0xAB, 0xDD};
 	uint8_t unique_id = 2;
-	XBee_config config("/dev/ttyUSB0", false, unique_id, pan_id, 750);
+	XBee_Config config("/dev/ttyUSB0", false, unique_id, pan_id, 750);
 	/* transmission test data */
 
 	XBee interface(config);
-	//interface.xbee_init();
+	interface.xbee_init();
 
 	//interface.xbee_status();
 	
 	interface.xbee_test_msg();
+	
 	printf("\n");
 	for (int i=0; i < 1; i++) {
 		sleep(2);
@@ -41,8 +42,9 @@ int main(int argc, char **argv) {
 	}
 
 	printf("\n");
+
+	interface.xbee_request_at_value("MY"); 	// own address
 	/*
-	interface.xbee_print_at_value("MY"); 	// own address
 	interface.xbee_print_at_value("ID");	// extended PAN ID
 	interface.xbee_print_at_value("OP");	// operating extended PAN ID
 	interface.xbee_print_at_value("OI");	// operating 16bit PAN ID

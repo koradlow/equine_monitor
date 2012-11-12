@@ -45,9 +45,11 @@ enum message_type {
 	DATA
 };
 
-class XBee_config {
+class XBee_Message;
+
+class XBee_Config {
 public:
-	XBee_config(std::string port, bool mode, const uint8_t unique_id,
+	XBee_Config(std::string port, bool mode, const uint8_t unique_id,
 	const uint8_t pan[2], uint32_t timeout);
 
 	std::string serial_port;
@@ -58,31 +60,24 @@ public:
 	uint32_t timeout;
 };
 
-class XBee_measurement {
-public:
-	XBee_measurement(enum sensor_type, const uint8_t* data, uint16_t length);
-	enum sensor_type type;
-	uint8_t* data;
-	uint16_t length;
-
-};
 
 class XBee {
 public:
-	XBee(XBee_config& config);
+	XBee(XBee_Config& config);
 	virtual ~XBee();
 	void xbee_init();
 	uint8_t xbee_status();
-	void xbee_print_at_value(std::string at);
-	uint8_t xbee_send_measurement(XBee_measurement& measurement);
-	void xbee_receive_measurement();
+	void xbee_request_at_value(std::string at);
+	uint8_t xbee_send_to_coordinator(XBee_Message& msg);
+	uint8_t xbee_send_to_node(XBee_Message& msg, std::string node);
+	XBee_Message* xbee_receive_message();
 	int xbee_bytes_available();
 	void xbee_test_msg();
 private: 
 	void xbee_start_network();
 	GBeeFrameData& xbee_receive_and_print(uint16_t *length);
 	uint8_t* xbee_at_cmd(const std::string at_cmd_str);
-	XBee_config config;
+	XBee_Config config;
 	GBee *gbee_handle;
 };
 
@@ -99,6 +94,7 @@ public:
 
 private:
 	bool append_msg(const XBee_Message &msg);
+	bool append_msg(const uint8_t *data);
 	uint8_t* get_msg(uint8_t part);
 	uint16_t get_msg_len(uint8_t part);
 
