@@ -55,19 +55,15 @@ public:
 class XBee_Config {
 public:
 	XBee_Config(const std::string &port, const std::string &node, bool mode, 
-		uint8_t unique_id, const uint8_t *pan, uint8_t pan_length, uint32_t timeout);
-	XBee_Config(const XBee_Config &conf);
-	XBee_Config& operator=(const XBee_Config &conf);
-	~XBee_Config();
-	
-	std::string serial_port;
-	std::string node;
-	bool coordinator_mode;
-	uint8_t unique_id;
-	uint8_t *pan_id;
-	uint8_t pan_length;
-	uint32_t baud_rate;
-	uint32_t timeout;
+		uint8_t unique_id, const uint8_t *pan, uint32_t timeout);
+
+	const std::string serial_port;
+	const std::string node;
+	const bool coordinator_mode;
+	const uint8_t unique_id;
+	uint8_t pan_id[8];
+	const uint32_t baud_rate;
+	const uint32_t timeout;
 };
 
 class XBee_At_Command {
@@ -117,7 +113,7 @@ private:
 };
 
 class XBee_Message {
-friend XBee;
+friend class XBee;
 public:
 	XBee_Message(enum message_type type, const uint8_t *payload, uint16_t length);
 	XBee_Message(const uint8_t *message);

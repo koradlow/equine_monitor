@@ -1,7 +1,7 @@
 #Define the compiler we want to use
 CC = g++
 #Define the compiler options for this project
-CFLAGS += -Wall -O3 -std=gnu++0x
+CFLAGS += -Wall -O0 -g -std=gnu++0x
 #Define the libraries that are used for this project
 LDLIBS += -lgbee
 

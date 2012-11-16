@@ -43,56 +43,17 @@ XBee_Address::XBee_Address(const std::string &node, const uint8_t *payload) :
 /** XBee_Config Class implementation */
 /* constructor of the XBee_config class, which is used to provide access
  * to configuration options. It is a raw data container at the moment */
+ /* TODO: find a good way to set baud rate for xbees */ 
 XBee_Config::XBee_Config(const std::string &port, const std::string &node, bool mode, 
-			uint8_t unique_id, const uint8_t *pan, uint8_t pan_length, uint32_t timeout):
+			uint8_t unique_id, const uint8_t *pan, uint32_t timeout):
 		serial_port(port),
 		node(node),
 		coordinator_mode(mode),
 		unique_id(unique_id),
-		pan_length(pan_length),
+		baud_rate(9600),
 		timeout(timeout)
 {
-	pan_id = new uint8_t[pan_length];
-	memcpy(pan_id, pan, pan_length);
-}
-
-/* copy constructor, performs a deep copy */
-XBee_Config::XBee_Config( const XBee_Config &conf) :
-	serial_port(conf.serial_port),
-	node(conf.node),
-	coordinator_mode(conf.coordinator_mode),
-	unique_id(conf.unique_id),
-	pan_length(conf.pan_length),
-	timeout(conf.timeout)
-{
-	this->pan_id = new uint8_t[pan_length];
-	memcpy(this->pan_id, conf.pan_id, pan_length);
-}
-
-/* assignment operator, performs deep copy for pointer members */
-XBee_Config& XBee_Config::operator=(const XBee_Config &conf) {
-	/* assign values from given object to local variables */ 
-	serial_port = conf.serial_port;
-	node = conf.node;
-	coordinator_mode = conf.coordinator_mode;
-	unique_id = conf.unique_id;
-	pan_length = conf.pan_length;
-	baud_rate = conf.baud_rate;
-	timeout = conf.timeout;
-	
-	/* free locally allocated memory, and copy memory content from conf.an_id
-	 * address into new allocated memory space */
-	if (pan_id)
-		delete[] pan_id;
-	pan_id = new uint8_t[pan_length];
-	memcpy(pan_id, conf.pan_id, pan_length);
-	
-	return *this;
-}
-
-XBee_Config::~XBee_Config() {
-	if (pan_id)
-		delete[] pan_id;
+	memcpy(pan_id, pan, 8);
 }
 
 /** XBee_At_Command Class implementation */
@@ -456,9 +417,9 @@ uint8_t XBee::xbee_configure_device() {
 	error_code = xbee_at_command(cmd);
 	if (error_code != GBEE_NO_ERROR)
 		return error_code;
-	if (memcmp(cmd.data, config.pan_id, cmd.length) != cmd.length) {
+	if (memcmp(cmd.data, config.pan_id, 8)) {
 		printf("Setting PAN ID\n");
-		XBee_At_Command cmd_pan("ID", config.pan_id, config.pan_length);
+		XBee_At_Command cmd_pan("ID", config.pan_id, 8);
 		xbee_at_command(cmd_pan);
 		register_updated = true;
 	}
@@ -468,7 +429,7 @@ uint8_t XBee::xbee_configure_device() {
 	error_code = xbee_at_command(cmd);
 	if (error_code != GBEE_NO_ERROR)
 		return error_code;
-	if (memcmp(cmd.data, config.node.c_str(), cmd.length) != cmd.length) {
+	if (memcmp(cmd.data, config.node.c_str(), config.node.length())) {
 		printf("Setting Node Identifier\n");
 		XBee_At_Command cmd_ni("NI", config.node);
 		xbee_at_command(cmd_ni);
@@ -477,7 +438,6 @@ uint8_t XBee::xbee_configure_device() {
 
 	if (register_updated) {
 		/* write the changes to the internal memory of the xbee module */
-		
 		cmd = XBee_At_Command("WR");
 		error_code = xbee_at_command(cmd);
 		if (error_code != GBEE_NO_ERROR)
@@ -525,7 +485,7 @@ uint8_t XBee::xbee_at_command(XBee_At_Command& cmd){
 	uint8_t response_cnt = 0;
 	uint16_t length = 0;
 	uint32_t timeout = config.timeout;
-	static uint8_t frame_id = 1;
+	static uint8_t frame_id;
 	
 	memset(&frame, 0, sizeof(frame));
 
@@ -541,15 +501,21 @@ uint8_t XBee::xbee_at_command(XBee_At_Command& cmd){
 	do {
 		error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
 		if (error_code != GBEE_NO_ERROR)
-			break;
+			return error_code;
+		
 		/* check if the received frame is a AT Command Response frame */
 		if (frame.ident == GBEE_AT_COMMAND_RESPONSE) {
 			GBeeAtCommandResponse *at_frame = (GBeeAtCommandResponse*) &frame;
 			if (at_frame->frameId != frame_id) {
-				printf("Error: Frame IDs not matching\n (%i : %i)\n",
+				printf("Problem: Frame IDs not matching\n (%i : %i)\n",
 				frame_id, at_frame->frameId);
 				error_code = GBEE_RESPONSE_ERROR;
-				break;
+				/* if the frameId is larger than expected nothing can be done */
+				if (frame_id < at_frame->frameId)
+					break;
+				/* if it's smaller, wait for a while and try again */
+				sleep(1);
+				continue;
 			}
 			/* copy the response payload into the XBee_At_Command object.
 			 * This frame type has an overhead of 5 bytes that are counted
@@ -558,13 +524,17 @@ uint8_t XBee::xbee_at_command(XBee_At_Command& cmd){
 				cmd.set_data(at_frame->value, length - 5);
 			else
 				cmd.append_data(at_frame->value, length - 5);
-			/* reset the timeout value, because it is updated to the
-			 * remaining time by the gbeeReceive function */
-			timeout = config.timeout;
+		/* Modem Status frames can be transmitted at arbitrary times,
+		 * as long as there's no message queue, we have to handle them here */
+		} else if (frame.ident == GBEE_MODEM_STATUS) {
+			GBeeModemStatus *status_frame = (GBeeModemStatus*) &frame;
+			printf("Received Modem status: %02x\n", status_frame->status);
+			sleep(1);
 		}
-	} while (error_code == GBEE_NO_ERROR);
-
-	return error_code;
+	} while (xbee_bytes_available() > 0);
+	/* in case there was an unexpected error, the function returned early
+	 * the only way we get this far, is if everything */
+	return GBEE_NO_ERROR;
 }
 
 /* sends the data in the message object to the coordinator */
@@ -682,7 +652,7 @@ uint8_t XBee::xbee_send(XBee_Message& msg, uint16_t addr16, uint32_t addr64h, ui
 	/* coordinator can be addressed by setting the 64bit destination
 	 * address to all zeros and the 16bit address to 0xFFFE */
 	uint32_t timeout = config.timeout;
-	static uint8_t frame_id = 0x01;
+	static uint8_t frame_id;;
 	memset(&frame, 0, sizeof(frame));
 
 	/* send the message, by splitting it up into parts that have the 

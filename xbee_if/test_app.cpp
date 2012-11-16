@@ -25,20 +25,21 @@
 const char* hex_str(uint8_t *data, uint8_t length);
 
 int main(int argc, char **argv) {
-	uint8_t pan_id[2] = {0xAB, 0xDD};
+	uint8_t pan_id[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0xAB, 0xBC, 0xCD};
 	uint8_t unique_id = 2;
-	XBee_Config config("/dev/ttyUSB0", "Denver", false, unique_id, pan_id, 2, 750);
+	uint8_t error_code;
+	XBee_Config config("/dev/ttyUSB0", "Denver", false, unique_id, pan_id, 9000);
 	
 	XBee interface(config);
-	if (interface.xbee_init() != GBEE_NO_ERROR) {
-		printf("Error: unable to configure device\n");
+	error_code = interface.xbee_init();
+	if (error_code != GBEE_NO_ERROR) {
+		printf("Error: unable to configure device, code: %02x\n", error_code);
 		return 0;
 	}
 
 	for (int i=0; i < 3; i++) {
 		interface.xbee_status();
 		sleep(2);
-	
 	}
 
 	/* print some information about the current network status */
