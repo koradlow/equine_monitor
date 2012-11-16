@@ -22,16 +22,165 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 
+
+/** XBee_Address Class implementation */
+/* default constructor of XBee_Address, creating an empty object */
+XBee_Address::XBee_Address() :
+	node(""),
+	addr16(0),
+	addr64h(0),
+	addr64l(0)
+{}
+
+/* constructor that decodes the data returned as an reply to the AT "DI"
+ * command by an XBee device */
+ // TODO: decode payload data
+XBee_Address::XBee_Address(const std::string &node, const uint8_t *payload) :
+	node(node)
+{
+}
+
 /** XBee_Config Class implementation */
 /* constructor of the XBee_config class, which is used to provide access
  * to configuration options. It is a raw data container at the moment */
-XBee_Config::XBee_Config(std::string port, bool mode, const uint8_t unique_id,
-			const uint8_t pan[2], uint32_t timeout):
-	serial_port(port),
-	coordinator_mode(mode),
-	unique_id(unique_id),
-	timeout(timeout) {
-		memcpy(pan_id, pan, 2);
+XBee_Config::XBee_Config(const std::string &port, const std::string &node, bool mode, 
+			uint8_t unique_id, const uint8_t *pan, uint8_t pan_length, uint32_t timeout):
+		serial_port(port),
+		node(node),
+		coordinator_mode(mode),
+		unique_id(unique_id),
+		pan_length(pan_length),
+		timeout(timeout)
+{
+	pan_id = new uint8_t[pan_length];
+	memcpy(pan_id, pan, pan_length);
+}
+
+/* copy constructor, performs a deep copy */
+XBee_Config::XBee_Config( const XBee_Config &conf) :
+	serial_port(conf.serial_port),
+	node(conf.node),
+	coordinator_mode(conf.coordinator_mode),
+	unique_id(conf.unique_id),
+	pan_length(conf.pan_length),
+	timeout(conf.timeout)
+{
+	this->pan_id = new uint8_t[pan_length];
+	memcpy(this->pan_id, conf.pan_id, pan_length);
+}
+
+/* assignment operator, performs deep copy for pointer members */
+XBee_Config& XBee_Config::operator=(const XBee_Config &conf) {
+	/* assign values from given object to local variables */ 
+	serial_port = conf.serial_port;
+	node = conf.node;
+	coordinator_mode = conf.coordinator_mode;
+	unique_id = conf.unique_id;
+	pan_length = conf.pan_length;
+	baud_rate = conf.baud_rate;
+	timeout = conf.timeout;
+	
+	/* free locally allocated memory, and copy memory content from conf.an_id
+	 * address into new allocated memory space */
+	if (pan_id)
+		delete[] pan_id;
+	pan_id = new uint8_t[pan_length];
+	memcpy(pan_id, conf.pan_id, pan_length);
+	
+	return *this;
+}
+
+XBee_Config::~XBee_Config() {
+	if (pan_id)
+		delete[] pan_id;
+}
+
+/** XBee_At_Command Class implementation */
+/* constructs a XBee_At_Command object, by copying the given values into
+ * an internal memory space */
+XBee_At_Command::XBee_At_Command(const std::string &command, const uint8_t *cmd_data, uint8_t cmd_length) :
+		at_command(command),
+		length(cmd_length)
+{
+	data = new uint8_t[cmd_length];
+	memcpy(data, cmd_data, cmd_length);
+}
+
+/* constructs a XBee_At_Command object, by translating the command string into
+ * a byte array and copying it an internal memory space */
+XBee_At_Command::XBee_At_Command(const std::string &command, const std::string &cmd_data) :
+		at_command(command),
+		length(cmd_data.length())
+{
+	data = new uint8_t[length];
+	memcpy(data, cmd_data.c_str(), length);
+}
+
+/* constructs a XBee_At_Command object that is empty except for the actual
+ * AT command, and can be used to request values */
+XBee_At_Command::XBee_At_Command(const std::string &command) :
+		at_command(command),
+		data(NULL),
+		length(0)
+{}
+
+/* copy constructor, performs a deep copy */
+XBee_At_Command::XBee_At_Command(const XBee_At_Command &cmd) :
+		at_command(cmd.at_command),
+		length(cmd.length)
+{
+	data = new uint8_t[length];
+	memcpy(data, cmd.data, length);
+}
+
+/* assignment operator, performs deep copy for pointer members */
+XBee_At_Command& XBee_At_Command::operator=(const XBee_At_Command &cmd) {
+	at_command = cmd.at_command;
+	length = cmd.length;
+
+	/* free locally allocated memory, and copy memory content from cmd.data
+	 * address into new allocated memory space */
+	if (data)
+		delete[] data;
+	data = new uint8_t[length];
+	memcpy(data, cmd.data, length);
+
+	return *this;
+}
+
+XBee_At_Command::~XBee_At_Command() {
+	if (data)
+		delete[] data;
+}
+
+/* frees the memory space allocated for the data, and copies the given 
+ * data into the object by allocating new memory space */
+void XBee_At_Command::set_data(const uint8_t *cmd_data, uint8_t cmd_length) {
+	if (data)
+		delete[] data;
+	length = cmd_length;
+	data = new uint8_t[cmd_length];
+	memcpy(data, cmd_data, cmd_length); 
+}
+
+/* appends the data chunk to the existing memory space in the object.
+ * This is used for AT commands with a multi frame reply */
+void XBee_At_Command::append_data(const uint8_t *new_data, uint8_t length) {
+	uint8_t *old_data = data;
+	
+	/* allocate new memory, big enough to contain the existing data and
+	 * the additional new data, and copy the old data to the new memory space */
+	data = new uint8_t[this->length + length];
+	memcpy(data, old_data, this->length);
+	
+	/* append the new_data to the existing data, and update the length
+	 * of the data field */
+	memcpy(&data[this->length], new_data, length);
+	this->length += length;
+	
+	/* free the old memory space */
+	if (old_data)
+		delete[] old_data;
 }
 
 /** XBee_Message Class implementation */
@@ -49,16 +198,8 @@ XBee_Message::XBee_Message(enum message_type type, const uint8_t *payload, uint1
 	/* allocate memory to copy the payload into the object */
 	this->payload = new uint8_t[payload_len];
 	memcpy(this->payload, payload, payload_len);
-
 	/* allocate memory for the message buffer */
-	if (message_part_cnt > 1) {
-		/* message has to be split into multiple parts, but each
-		 * single part will not be larger thatn the maximal msg lengh */
-		this->message_buffer = new uint8_t[XBEE_MSG_LENGTH];
-	} else {
-		/* message fits into one transmission */
-		this->message_buffer = new uint8_t[length + MSG_HEADER_LENGTH];
-	}
+	message_buffer = allocate_msg_buffer(payload_len);
 }
 
 /* constructor for XBee_messages - used to deserialize objects after reception */
@@ -70,7 +211,6 @@ XBee_Message::XBee_Message(const uint8_t *message):
 		message_part_cnt(message[MSG_PART_CNT])
 {
 	/* allocate memory to copy the payload into the object */
-	printf("payload len: %u\n", payload_len);
 	this->payload = new uint8_t[payload_len];
 	memcpy(this->payload, &message[MSG_HEADER_LENGTH], payload_len);
 
@@ -92,6 +232,44 @@ XBee_Message::XBee_Message():
 	message_complete(false)
 {}
 
+/* copy constructor, performs a deep copy */
+XBee_Message::XBee_Message(const XBee_Message& msg) :
+	type(msg.type),
+	payload_len(msg.payload_len),
+	message_part(msg.message_part),
+	message_part_cnt(msg.message_part_cnt),
+	message_complete(msg.message_complete)
+{
+	/* allocate memory space for the payload and copy the data from msg */
+	payload = new uint8_t[payload_len];
+	memcpy(payload, msg.payload, payload_len);
+	/* allocate memory for the message buffer */
+	message_buffer = allocate_msg_buffer(payload_len);
+}
+
+/* assignment operator, performs deep copy for pointer members */
+XBee_Message& XBee_Message::operator=(const XBee_Message& msg) {
+	payload_len = msg.payload_len;
+	message_part = msg.message_part;
+	message_part_cnt = msg.message_part_cnt;
+	message_complete = msg.message_complete;
+
+	/* take care of pointer members */
+	/* if memory was allocated in the object, free the memory */
+	if (payload)
+		delete[] payload;
+	if (message_buffer)
+		delete[] message_buffer;
+
+	/* allocate memory space for the payload and copy the data from msg */
+	payload = new uint8_t[payload_len];
+	memcpy(payload, msg.payload, payload_len);
+	/* allocate memory for the message buffer */
+	message_buffer = allocate_msg_buffer(payload_len);
+
+	return *this;
+}
+
 XBee_Message::~XBee_Message() {
 	if (payload)
 		delete[] payload;
@@ -112,7 +290,7 @@ bool XBee_Message::is_complete() {
 	return message_complete;
 }
 
-/* reconstructs messages that consist of multiple parts, return true if
+/* reconstructs messages that consist of multiple parts, returns true if
  * the message was successfully appended and false, if the operation failed
  * due to failed validity check */
 bool XBee_Message::append_msg(const XBee_Message &msg) {
@@ -160,6 +338,14 @@ uint8_t* XBee_Message::get_msg(uint8_t part = 1) {
 	uint16_t overhead_len;
 	uint16_t offset = 0;
 
+	/* check if memory was allocated for the message_buffer. Because
+	 * we're working on a machine with limited memory, there is a case
+	 * when no memory is allocated for the buffer during object instantiation
+	 * (de-serializing object from byte stream) because these objects are only used
+	 * to put received message back together */
+	if (!message_buffer)
+		return NULL;
+	
 	if (message_part_cnt > 1) {
 		/* calculate the length of the payload in last message part */
 		overhead_len = length - (message_part_cnt - 1) * (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH);
@@ -182,6 +368,11 @@ uint8_t* XBee_Message::get_msg(uint8_t part = 1) {
 
 /* returns the length of the requested part of the message (including header) */
 uint16_t XBee_Message::get_msg_len(uint8_t part = 1) {
+	/* check if memory was allocated for the message_buffer, and see
+	 * get_msg function for explanation */
+	if (!message_buffer)
+		return 0;
+
 	/* message consists of one part? */
 	if (message_part_cnt == 1)
 		return (MSG_HEADER_LENGTH + payload_len);
@@ -197,85 +388,108 @@ uint16_t XBee_Message::get_msg_len(uint8_t part = 1) {
 	return MSG_HEADER_LENGTH + payload_len - transmitted_len;
 }
 
+/* allocates memory in for the message buffer in a XBee_Message object.
+ * The size of the memory depends on the the fact if the payload will fit
+ * into one transmission or has to be split up */
+uint8_t* XBee_Message::allocate_msg_buffer(uint8_t payload_len) {
+	uint8_t *message_buffer;
+	uint8_t msg_part_cnt;
+	
+	/* calculate the number of parts required to transmit this message */
+	msg_part_cnt = payload_len / (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH) + 1;
+	
+	/* allocate memory for the message buffer */
+	if (msg_part_cnt > 1) {
+		/* message has to be split into multiple parts, but each
+		 * single part will not be larger thatn the maximal msg lengh */
+		message_buffer = new uint8_t[XBEE_MSG_LENGTH];
+	} else {
+		/* message fits into one transmission */
+		message_buffer = new uint8_t[payload_len + MSG_HEADER_LENGTH];
+	}
 
+	return message_buffer;
+}
+ 
 /** XBee Class implementation */
 XBee::XBee(XBee_Config& config) :
-	config(config) {}
+	config(config),
+	address_cache_size(0)
+{}
 
 XBee::~XBee() {
 	gbeeDestroy(gbee_handle);
+	for (int i = 0; i < address_cache_size; i++)
+		delete address_cache[i];
 }
 
 /* the init function initializes the internally used libgbee library by creating
  * a handle for the xbee device */
-void XBee::xbee_init() {
+uint8_t XBee::xbee_init() {
 	gbee_handle = gbeeCreate(config.serial_port.c_str());
 	if (!gbee_handle) {
 		printf("Error creating handle for XBee device\n");
 		exit(-1);
 	}
-	sleep(1);
 
 	/* TODO: check if device is operating in API mode: the functions provided by
 	 * libgbee (gbeeGetMode, gbeeSetMode) cannot be used, because they rely
 	 * on the AT mode of the devices which is not working with the current
 	 * Firmware version */
+	return xbee_configure_device();
 }
 
-/* the start network function sets the basic parameters for the ZigBee network,
- * it only needs to be called the first time working with new XBee modules,
- * because the parameters are stored in the device memory */
-void XBee::xbee_start_network() {
-	GBeeError error_code;
-	uint16_t length;
-	uint8_t value[64];
+/* the configure device function sets the basic parameters for the XBee modules,
+ * according to the values found in the XBee_Config object.
+ * It will read the register values from the device and compare them with the
+ * desired values, updating them if a mismatch is detected. If a register was
+ * updated the changes are written into the nonvolatile memory of the device */
+ // TODO: Configure Sleep Mode for Coordinator / End Devices
+uint8_t XBee::xbee_configure_device() {
+	uint8_t error_code;
+	bool register_updated = false;
 
-	printf("Setting constant parameters for new Network \n"); 
+	printf("Validating device configuration \n"); 
 	
-	/* set the 64bit PAN ID */
-	error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("ID"),
-	&config.pan_id[0], 2);
-	printf("Set 64bit PAN ID: %s\n", gbeeUtilCodeToString(error_code));
-	xbee_receive_and_print(&length);
+	/* check the 64bit PAN ID */
+	XBee_At_Command cmd("ID");
+	error_code = xbee_at_command(cmd);
+	if (error_code != GBEE_NO_ERROR)
+		return error_code;
+	if (memcmp(cmd.data, config.pan_id, cmd.length) != cmd.length) {
+		printf("Setting PAN ID\n");
+		XBee_At_Command cmd_pan("ID", config.pan_id, config.pan_length);
+		xbee_at_command(cmd_pan);
+		register_updated = true;
+	}
 	
-	/* enable sleep mode for end devices, disable for controllers */
-	if (config.coordinator_mode) {
-		value[0] = 0x00;
-		error_code = gbeeSendAtCommandQueue(gbee_handle, 0,
-		xbee_at_cmd("SL"), &value[0], 1); 
-	} else {
-		value[0] = 0x04; /* cyclic sleep */
-		error_code = gbeeSendAtCommandQueue(gbee_handle, 0,
-		xbee_at_cmd("SL"), &value[0], 1); 
+	/* check the Node Identifier */
+	cmd = XBee_At_Command("NI");
+	error_code = xbee_at_command(cmd);
+	if (error_code != GBEE_NO_ERROR)
+		return error_code;
+	if (memcmp(cmd.data, config.node.c_str(), cmd.length) != cmd.length) {
+		printf("Setting Node Identifier\n");
+		XBee_At_Command cmd_ni("NI", config.node);
+		xbee_at_command(cmd_ni);
+		register_updated = true;
+	}
+
+	if (register_updated) {
+		/* write the changes to the internal memory of the xbee module */
 		
+		cmd = XBee_At_Command("WR");
+		error_code = xbee_at_command(cmd);
+		if (error_code != GBEE_NO_ERROR)
+			return error_code;
+
+		/* apply the queued changes */
+		cmd = XBee_At_Command("AC");
+		error_code = xbee_at_command(cmd);
+		if (error_code != GBEE_NO_ERROR)
+			return error_code;
 	}
-	printf("%s sleep mode: %s\n", (config.coordinator_mode)?
-	"Disabled" : "Enabled", gbeeUtilCodeToString(error_code));
-	xbee_receive_and_print(&length);
-
-	/* if configuring end device, set the destination address registers
-	 * to the default address of the coordinator */
-	if (!config.coordinator_mode) {
-		value[0] = 0x00; 
-		error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("DH"), &value[0], 1);
-		printf("Set DH Address: %s\n", gbeeUtilCodeToString(error_code)); 
-		xbee_receive_and_print(&length);
-		error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("DL"), &value[0], 1); 
-		printf("Set DL Address: %s\n", gbeeUtilCodeToString(error_code)); 
-		xbee_receive_and_print(&length);
-	}
-
-	/* write the changes to the internal memory of the xbee module */
-	error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("WR"), &value[0], 0);
-	printf("Write settings to memory: %s\n", gbeeUtilCodeToString(error_code)); 
-	// wait for 'OK'
-	xbee_receive_and_print(&length);
-
-	/* apply the queued changes */
-	error_code = gbeeSendAtCommandQueue(gbee_handle, 0, xbee_at_cmd("AC"), &value[0], 0);
-	printf("Apply queued changes: %s\n", gbeeUtilCodeToString(error_code)); 
-	// wait for 'Associated'
-	xbee_receive_and_print(&length);
+	return GBEE_NO_ERROR;
 }
 
 /* xbee_status requests, decodes and prints the current status of the XBee module */
@@ -287,7 +501,7 @@ uint8_t XBee::xbee_status() {
 	uint8_t status = 0xFE;	/* Unknown Status */
 	
 	/* query the current network status and print the response in cleartext */
-	error_code = gbeeSendAtCommand(gbee_handle, frame_id, xbee_at_cmd("AI"), NULL, 0);
+	error_code = gbeeSendAtCommand(gbee_handle, frame_id, at_cmd_str("AI"), NULL, 0);
 	if (error_code != GBEE_NO_ERROR) {
 		printf("Error requesting XBee status: %s\n", gbeeUtilCodeToString(error_code));
 		return status;
@@ -303,25 +517,27 @@ uint8_t XBee::xbee_status() {
 	return status;
 }
 
-/* sends out the requested AT command, receives & returns the register value */
-void XBee::xbee_request_at_value(std::string at){
+/* sends out the requested AT command, receives & stores the register value 
+ * in the XBee_At_Command object */
+uint8_t XBee::xbee_at_command(XBee_At_Command& cmd){
 	GBeeFrameData frame;
 	GBeeError error_code;
-	uint16_t length;
-	uint16_t payload;
+	uint8_t response_cnt = 0;
+	uint16_t length = 0;
 	uint32_t timeout = config.timeout;
 	static uint8_t frame_id = 1;
 	
 	memset(&frame, 0, sizeof(frame));
-	length = 0;
-	/* query the current network status and print the response in cleartext */
-	frame_id = (frame_id % 255) + 1;	/* give each frame a unique ID */
-	error_code = gbeeSendAtCommand(gbee_handle, frame_id, xbee_at_cmd(at.c_str()), NULL, 0);
-	if (error_code != GBEE_NO_ERROR)
-		printf("Error sending XBee AT (%s) command : %s\n", at.c_str(),
-		gbeeUtilCodeToString(error_code));
 
-	/* receive the response and print the value */
+	/* send the AT command & data to the device */
+	frame_id = (frame_id % 255) + 1;	/* give each frame a unique ID */
+	error_code = gbeeSendAtCommand(gbee_handle, frame_id, at_cmd_str(cmd.at_command), cmd.data, cmd.length);
+	if (error_code != GBEE_NO_ERROR) {
+		printf("Error sending XBee AT (%s) command : %s\n", cmd.at_command.c_str(),
+		gbeeUtilCodeToString(error_code));
+		return error_code;
+	}
+	/* try to receive the response and copy it into the XBee_At_Command object*/
 	do {
 		error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
 		if (error_code != GBEE_NO_ERROR)
@@ -329,68 +545,42 @@ void XBee::xbee_request_at_value(std::string at){
 		/* check if the received frame is a AT Command Response frame */
 		if (frame.ident == GBEE_AT_COMMAND_RESPONSE) {
 			GBeeAtCommandResponse *at_frame = (GBeeAtCommandResponse*) &frame;
-			payload = length - 5;	/* 5 bytes overhead */
 			if (at_frame->frameId != frame_id) {
 				printf("Error: Frame IDs not matching\n (%i : %i)\n",
 				frame_id, at_frame->frameId);
+				error_code = GBEE_RESPONSE_ERROR;
+				break;
 			}
-			printf("Received AT (%c%c) response with length: %d, status: %d and value: ", 
-			at_frame->atCommand[0], at_frame->atCommand[1],length, at_frame->status);
-			for (int i = payload-1; i >= 0; i--)
-				printf("%02x",at_frame->value[i]);
-			printf("\n");
+			/* copy the response payload into the XBee_At_Command object.
+			 * This frame type has an overhead of 5 bytes that are counted
+			 * as part of the length. */
+			if (response_cnt++ < 1)
+				cmd.set_data(at_frame->value, length - 5);
+			else
+				cmd.append_data(at_frame->value, length - 5);
+			/* reset the timeout value, because it is updated to the
+			 * remaining time by the gbeeReceive function */
+			timeout = config.timeout;
 		}
 	} while (error_code == GBEE_NO_ERROR);
+
+	return error_code;
 }
 
-/* sends the data in the measurement object to the coordinator */
+/* sends the data in the message object to the coordinator */
 uint8_t XBee::xbee_send_to_coordinator(XBee_Message& msg) {
-	GBeeFrameData frame;
-	GBeeError error_code;
-	uint8_t options = 0x00;	/* 0x01 = Disable ACK, 0x20 - Enable APS
-				 * encryption (if EE=1), 0x04 = Send packet
-				 * with Broadcast Pan ID.
-				 * All other bits must be set to 0. */
-	uint8_t frame_id = 0x02;
-	uint8_t tx_status = 0xFF;	/* -> Unknown Tx Status */
-	uint8_t bcast_radius = 0;	/* -> max hops for bcast transmission */
-	uint16_t length;
 	/* coordinator can be addressed by setting the 64bit destination
 	 * address to all zeros and the 16bit address to 0xFFFE */
-	uint16_t destination = 0xFFFE;
-	uint32_t timeout = config.timeout;
-	memset(&frame, 0, sizeof(frame));
+	uint16_t addr16 = 0xFFFE;
+	return xbee_send(msg, addr16, 0,0);
+}
 
-	/* send the message, by splitting it up into parts that have the 
-	 * correct length for transmission over ZigBee */
-	for (uint8_t i = 1; i <= msg.message_part_cnt; i++) {
-		/* send out one part of the message */
-		error_code = gbeeSendTxRequest(gbee_handle, frame_id, 0, 0,
-		destination, bcast_radius, options, msg.get_msg(i), msg.get_msg_len(i));
-		if (error_code != GBEE_NO_ERROR) {
-			printf("Error sending measurement data: %s\n",
-			gbeeUtilCodeToString(error_code));
-			tx_status = 0xFF;	/* -> Unknown Tx Status */
-			break;
-		}
-		
-		/* check the transmission status of message part*/
-		error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
-		if (error_code != GBEE_NO_ERROR) {
-			printf("Error receiving transmission status message: error= %s\n",
-			gbeeUtilCodeToString(error_code));
-			tx_status = 0xFF;	/* -> Unknown Tx Status */
-			break;
-		/* check if the received frame is a TxStatus frame */
-		} else if (frame.ident == GBEE_TX_STATUS_NEW) {
-			GBeeTxStatusNew *tx_frame = (GBeeTxStatusNew*) &frame;
-			printf("Transmission status: %s\n",
-			gbeeUtilTxStatusCodeToString(tx_frame->deliveryStatus));
-			tx_status = tx_frame->deliveryStatus; 
-		}
-	}
-
-	return tx_status;
+/* sends the data in the message object to a Network Node */
+uint8_t XBee::xbee_send_to_node(XBee_Message& msg, const std::string &node) {
+	const XBee_Address *addr = xbee_get_address(node);
+	if (!addr)
+		return GBEE_TIMEOUT_ERROR;	/* node couldn't be found in network */
+	return xbee_send(msg, addr->addr16, addr->addr64h, addr->addr64l);
 }
 
 /* checks the buffer for (parts of) messages, puts together a complete message
@@ -431,6 +621,30 @@ XBee_Message* XBee::xbee_receive_message() {
 	return msg;
 }
 
+/* returns a reference to an address object, that contains the current network 
+ * address of the node identified by the string */
+const XBee_Address* XBee::xbee_get_address(const std::string &node) {
+	uint8_t error_code;
+
+	/* check for cached addresses */
+	for (int i = 0; i < address_cache_size; i++) {
+		if (address_cache[i]->node == node)
+			return address_cache[i];
+	}
+	/* address not cached -> do a destination node lookup */
+	XBee_At_Command cmd("DN", config.node); 
+	error_code = xbee_at_command(cmd);
+	if (error_code != GBEE_NO_ERROR) {
+		printf("Node discovery failed, error: %s\n", gbeeUtilCodeToString((gbeeError)error_code));
+		return NULL;
+	}
+	/* decode the returned data and add the address to the cache */
+	XBee_Address *new_address = new XBee_Address(node, cmd.data);
+	address_cache[address_cache_size++] = new_address;
+	
+	return new_address;
+}
+
 /* checks the buffer of the serial device for available data, and returns the 
  * number of pending bytes */
 int XBee::xbee_bytes_available() {
@@ -455,13 +669,63 @@ GBeeFrameData& XBee::xbee_receive_and_print(uint16_t *length) {
 	return frame;
 }
 
+uint8_t XBee::xbee_send(XBee_Message& msg, uint16_t addr16, uint32_t addr64h, uint32_t addr64l) {
+	GBeeFrameData frame;
+	GBeeError error_code;
+	uint8_t options = 0x00;	/* 0x01 = Disable ACK, 0x20 - Enable APS
+				 * encryption (if EE=1), 0x04 = Send packet
+				 * with Broadcast Pan ID.
+				 * All other bits must be set to 0. */
+	uint8_t tx_status = 0xFF;	/* -> Unknown Tx Status */
+	uint8_t bcast_radius = 0;	/* -> max hops for bcast transmission */
+	uint16_t length;
+	/* coordinator can be addressed by setting the 64bit destination
+	 * address to all zeros and the 16bit address to 0xFFFE */
+	uint32_t timeout = config.timeout;
+	static uint8_t frame_id = 0x01;
+	memset(&frame, 0, sizeof(frame));
+
+	/* send the message, by splitting it up into parts that have the 
+	 * correct length for transmission over ZigBee */
+	for (uint8_t i = 1; i <= msg.message_part_cnt; i++) {
+		/* send out one part of the message */
+		frame_id = (frame_id % 255) + 1;	/* give each frame a unique ID */
+		error_code = gbeeSendTxRequest(gbee_handle, frame_id, addr64h, addr64l,
+		addr16, bcast_radius, options, msg.get_msg(i), msg.get_msg_len(i));
+		if (error_code != GBEE_NO_ERROR) {
+			printf("Error sending message part %u of %u: %s\n",
+			i, msg.message_part_cnt, gbeeUtilCodeToString(error_code));
+			tx_status = 0xFF;	/* -> Unknown Tx Status */
+			break;
+		}
+		
+		/* check the transmission status of message part*/
+		error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
+		if (error_code != GBEE_NO_ERROR) {
+			printf("Error receiving transmission, status message: error= %s\n",
+			gbeeUtilCodeToString(error_code));
+			tx_status = 0xFF;	/* -> Unknown Tx Status */
+			break;
+		/* check if the received frame is a TxStatus frame */
+		} else if (frame.ident == GBEE_TX_STATUS_NEW) {
+			GBeeTxStatusNew *tx_frame = (GBeeTxStatusNew*) &frame;
+			printf("Transmission status: %s\n",
+			gbeeUtilTxStatusCodeToString(tx_frame->deliveryStatus));
+			tx_status = tx_frame->deliveryStatus; 
+		}
+	}
+
+	return tx_status;
+}
+
 /* converts a std::string into a ASCII coded byte array - the length of
  * the byte array is fixed to a length of an AT command (2 chars) */
-uint8_t* XBee::xbee_at_cmd(const std::string at_cmd_str) {
+uint8_t* XBee::at_cmd_str(const std::string at_cmd_str) {
 	static uint8_t at_cmd[2];
 	memcpy(at_cmd, at_cmd_str.c_str(), 2);
 	return &at_cmd[0];
 }
+
 
 #define DTA_SIZE 400
 void XBee::xbee_test_msg() {

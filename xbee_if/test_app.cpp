@@ -22,36 +22,48 @@
 #include <array> 
 #include <unistd.h>
 
+const char* hex_str(uint8_t *data, uint8_t length);
+
 int main(int argc, char **argv) {
 	uint8_t pan_id[2] = {0xAB, 0xDD};
 	uint8_t unique_id = 2;
-	XBee_Config config("/dev/ttyUSB0", false, unique_id, pan_id, 750);
-	/* transmission test data */
-
+	XBee_Config config("/dev/ttyUSB0", "Denver", false, unique_id, pan_id, 2, 750);
+	
 	XBee interface(config);
-	interface.xbee_init();
+	if (interface.xbee_init() != GBEE_NO_ERROR) {
+		printf("Error: unable to configure device\n");
+		return 0;
+	}
 
-	//interface.xbee_status();
-	
-	interface.xbee_test_msg();
-	
-	printf("\n");
-	for (int i=0; i < 1; i++) {
+	for (int i=0; i < 3; i++) {
+		interface.xbee_status();
 		sleep(2);
 	
 	}
 
-	printf("\n");
-
-	interface.xbee_request_at_value("MY"); 	// own address
-	/*
-	interface.xbee_print_at_value("ID");	// extended PAN ID
-	interface.xbee_print_at_value("OP");	// operating extended PAN ID
-	interface.xbee_print_at_value("OI");	// operating 16bit PAN ID
-	interface.xbee_print_at_value("DH");	// destination Address high
-	interface.xbee_print_at_value("DL");	// destination Address low
-	interface.xbee_print_at_value("SM");	// sleep mode
-	interface.xbee_print_at_value("MP");	// 16bit Parent Address
-	*/
+	/* print some information about the current network status */
+	XBee_At_Command cmd("MY");
+	interface.xbee_at_command(cmd);
+	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
+	
+	cmd = XBee_At_Command("ID");
+	interface.xbee_at_command(cmd);
+	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
+	
+	cmd = XBee_At_Command("NI");
+	interface.xbee_at_command(cmd);
+	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
+	
+	cmd = XBee_At_Command("NP");
+	interface.xbee_at_command(cmd);
+	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
+	
 	return 0;
+}
+
+const char* hex_str(uint8_t *data, uint8_t length) {
+	static char c_str[80];
+	for (int i = 0; i < length; i++)
+		sprintf(&c_str[i*3], "%02x ", data[i]);
+	return c_str;
 }
