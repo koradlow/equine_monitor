@@ -34,10 +34,12 @@ XBee_Address::XBee_Address() :
 
 /* constructor that decodes the data returned as an reply to the AT "DI"
  * command by an XBee device */
- // TODO: decode payload data
 XBee_Address::XBee_Address(const std::string &node, const uint8_t *payload) :
 	node(node)
 {
+	memcpy(&addr16, payload, 2);
+	memcpy(&addr64h, &payload[2], 4);
+	memcpy(&addr64l, &payload[6], 4);
 }
 
 /** XBee_Config Class implementation */
@@ -605,8 +607,10 @@ const XBee_Address* XBee::xbee_get_address(const std::string &node) {
 
 	/* check for cached addresses */
 	for (int i = 0; i < address_cache_size; i++) {
-		if (address_cache[i]->node == node)
+		if (address_cache[i]->node == node) {
+			printf("cache hit\n");
 			return address_cache[i];
+		}
 	}
 	/* address not cached -> do a destination node lookup */
 	XBee_At_Command cmd("DN", config.node); 
