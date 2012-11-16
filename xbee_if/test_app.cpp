@@ -59,6 +59,10 @@ int main(int argc, char **argv) {
 	interface.xbee_at_command(cmd);
 	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
 	
+	cmd = XBee_At_Command("DN", "coordinator");
+	interface.xbee_at_command(cmd);
+	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
+	
 	return 0;
 }
 

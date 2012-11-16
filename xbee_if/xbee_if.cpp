@@ -61,7 +61,8 @@ XBee_Config::XBee_Config(const std::string &port, const std::string &node, bool 
  * an internal memory space */
 XBee_At_Command::XBee_At_Command(const std::string &command, const uint8_t *cmd_data, uint8_t cmd_length) :
 		at_command(command),
-		length(cmd_length)
+		length(cmd_length),
+		status(0x00)
 {
 	data = new uint8_t[cmd_length];
 	memcpy(data, cmd_data, cmd_length);
@@ -71,7 +72,8 @@ XBee_At_Command::XBee_At_Command(const std::string &command, const uint8_t *cmd_
  * a byte array and copying it an internal memory space */
 XBee_At_Command::XBee_At_Command(const std::string &command, const std::string &cmd_data) :
 		at_command(command),
-		length(cmd_data.length())
+		length(cmd_data.length()),
+		status(0x00)
 {
 	data = new uint8_t[length];
 	memcpy(data, cmd_data.c_str(), length);
@@ -82,13 +84,15 @@ XBee_At_Command::XBee_At_Command(const std::string &command, const std::string &
 XBee_At_Command::XBee_At_Command(const std::string &command) :
 		at_command(command),
 		data(NULL),
-		length(0)
+		length(0),
+		status(0x00)
 {}
 
 /* copy constructor, performs a deep copy */
 XBee_At_Command::XBee_At_Command(const XBee_At_Command &cmd) :
 		at_command(cmd.at_command),
-		length(cmd.length)
+		length(cmd.length),
+		status(cmd.status)
 {
 	data = new uint8_t[length];
 	memcpy(data, cmd.data, length);
@@ -98,6 +102,7 @@ XBee_At_Command::XBee_At_Command(const XBee_At_Command &cmd) :
 XBee_At_Command& XBee_At_Command::operator=(const XBee_At_Command &cmd) {
 	at_command = cmd.at_command;
 	length = cmd.length;
+	status = cmd.status;
 
 	/* free locally allocated memory, and copy memory content from cmd.data
 	 * address into new allocated memory space */
@@ -116,29 +121,31 @@ XBee_At_Command::~XBee_At_Command() {
 
 /* frees the memory space allocated for the data, and copies the given 
  * data into the object by allocating new memory space */
-void XBee_At_Command::set_data(const uint8_t *cmd_data, uint8_t cmd_length) {
+void XBee_At_Command::set_data(const uint8_t *cmd_data, uint8_t cmd_length, uint8_t cmd_status) {
 	if (data)
 		delete[] data;
 	length = cmd_length;
 	data = new uint8_t[cmd_length];
-	memcpy(data, cmd_data, cmd_length); 
+	memcpy(data, cmd_data, cmd_length);
+	status = cmd_status; 
 }
 
 /* appends the data chunk to the existing memory space in the object.
  * This is used for AT commands with a multi frame reply */
-void XBee_At_Command::append_data(const uint8_t *new_data, uint8_t length) {
+void XBee_At_Command::append_data(const uint8_t *new_data, uint8_t cmd_length, uint8_t cmd_status) {
 	uint8_t *old_data = data;
 	
+	status = cmd_status;
 	/* allocate new memory, big enough to contain the existing data and
 	 * the additional new data, and copy the old data to the new memory space */
-	data = new uint8_t[this->length + length];
-	memcpy(data, old_data, this->length);
-	
+	data = new uint8_t[length + cmd_length];
+	memcpy(data, old_data, length);
+
 	/* append the new_data to the existing data, and update the length
 	 * of the data field */
-	memcpy(&data[this->length], new_data, length);
-	this->length += length;
-	
+	memcpy(&data[length], new_data, cmd_length);
+	length += cmd_length;
+
 	/* free the old memory space */
 	if (old_data)
 		delete[] old_data;
@@ -521,9 +528,9 @@ uint8_t XBee::xbee_at_command(XBee_At_Command& cmd){
 			 * This frame type has an overhead of 5 bytes that are counted
 			 * as part of the length. */
 			if (response_cnt++ < 1)
-				cmd.set_data(at_frame->value, length - 5);
+				cmd.set_data(at_frame->value, length - 5, at_frame->status);
 			else
-				cmd.append_data(at_frame->value, length - 5);
+				cmd.append_data(at_frame->value, length - 5, at_frame->status);
 		/* Modem Status frames can be transmitted at arbitrary times,
 		 * as long as there's no message queue, we have to handle them here */
 		} else if (frame.ident == GBEE_MODEM_STATUS) {

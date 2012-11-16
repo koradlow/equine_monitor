@@ -75,12 +75,13 @@ public:
 	XBee_At_Command& operator=(const XBee_At_Command &cmd);
 	~XBee_At_Command();
 
-	void set_data(const uint8_t *data, uint8_t length);
-	void append_data(const uint8_t *data, uint8_t length);
+	void set_data(const uint8_t *data, uint8_t length, uint8_t status);
+	void append_data(const uint8_t *data, uint8_t length, uint8_t status);
 	
 	std::string at_command;
 	uint8_t *data;
 	uint8_t length;
+	uint8_t status;
 private:
 
 };
