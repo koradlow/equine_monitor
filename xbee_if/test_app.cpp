@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
-	for (int i=0; i < 3; i++) {
+	for (int i=0; i < 1; i++) {
 		interface.xbee_status();
 		sleep(2);
 	}
@@ -46,23 +46,30 @@ int main(int argc, char **argv) {
 	XBee_At_Command cmd("MY");
 	interface.xbee_at_command(cmd);
 	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-	
+
 	cmd = XBee_At_Command("ID");
 	interface.xbee_at_command(cmd);
 	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-	
+
 	cmd = XBee_At_Command("NI");
 	interface.xbee_at_command(cmd);
 	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-	
+
 	cmd = XBee_At_Command("NP");
 	interface.xbee_at_command(cmd);
 	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-	
-	cmd = XBee_At_Command("DN", "coordinator");
+
+	cmd = XBee_At_Command("SH");
 	interface.xbee_at_command(cmd);
 	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-	
+	cmd = XBee_At_Command("SL");
+	interface.xbee_at_command(cmd);
+	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
+
+	const XBee_Address *addr = interface.xbee_get_address("coordinator");
+	printf("Address of %s: 16bit: %04x, 64bith: %08x, 64bitl: %08x\n", addr->node.c_str(), 
+	addr->addr16, addr->addr64h, addr->addr64l);
+
 	return 0;
 }
 

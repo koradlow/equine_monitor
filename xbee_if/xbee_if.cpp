@@ -32,14 +32,24 @@ XBee_Address::XBee_Address() :
 	addr64l(0)
 {}
 
-/* constructor that decodes the data returned as an reply to the AT "DI"
+/* constructor that decodes the data returned as an reply to the AT "DN"
  * command by an XBee device */
 XBee_Address::XBee_Address(const std::string &node, const uint8_t *payload) :
-	node(node)
+	node(node),
+	addr64h(0),
+	addr64l(0)
 {
-	memcpy(&addr16, payload, 2);
-	memcpy(&addr64h, &payload[2], 4);
-	memcpy(&addr64l, &payload[6], 4);
+	/* the response to a Destination Node discovery command is a message
+	 * with a length of 10 bytes, where the first 2 bytes define the
+	 * 16-bit address, bytes 2-5 the high part of the 64-bit address
+	 * and bytes 6-9 the low part of the 64-bit address.
+	 * The addresses are encoded as hex characters transmitted in print order,
+	 * so some bit shifting is required to decode them into uint values */ 
+	addr16 = (uint8_t)payload[0] << 8 | (uint8_t)payload[1];
+	for (int i = 0; i <= 3; i++) {
+		addr64h |= (uint8_t)payload[i+2] << (3-i)*8;
+		addr64l |= (uint8_t)payload[i+6] << (3-i)*8;
+	} 
 }
 
 /** XBee_Config Class implementation */
@@ -613,7 +623,7 @@ const XBee_Address* XBee::xbee_get_address(const std::string &node) {
 		}
 	}
 	/* address not cached -> do a destination node lookup */
-	XBee_At_Command cmd("DN", config.node); 
+	XBee_At_Command cmd("DN", node); 
 	error_code = xbee_at_command(cmd);
 	if (error_code != GBEE_NO_ERROR) {
 		printf("Node discovery failed, error: %s\n", gbeeUtilCodeToString((gbeeError)error_code));
@@ -622,7 +632,7 @@ const XBee_Address* XBee::xbee_get_address(const std::string &node) {
 	/* decode the returned data and add the address to the cache */
 	XBee_Address *new_address = new XBee_Address(node, cmd.data);
 	address_cache[address_cache_size++] = new_address;
-	
+
 	return new_address;
 }
 
