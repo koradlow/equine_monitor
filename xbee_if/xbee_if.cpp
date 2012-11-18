@@ -43,8 +43,7 @@ XBee_Address::XBee_Address(const std::string &node, const uint8_t *payload) :
 	 * with a length of 10 bytes, where the first 2 bytes define the
 	 * 16-bit address, bytes 2-5 the high part of the 64-bit address
 	 * and bytes 6-9 the low part of the 64-bit address.
-	 * The addresses are encoded as hex characters transmitted in print order,
-	 * so some bit shifting is required to decode them into uint values */ 
+	 * The addresses are encoded as hex characters transmitted in big-endian */ 
 	addr16 = (uint8_t)payload[0] << 8 | (uint8_t)payload[1];
 	for (int i = 0; i <= 3; i++) {
 		addr64h |= (uint8_t)payload[i+2] << (3-i)*8;
@@ -165,19 +164,21 @@ void XBee_At_Command::append_data(const uint8_t *new_data, uint8_t cmd_length, u
 
 /** XBee_Message Class implementation */
 /* constructor for a XBee message - used to create messages for transmission */
-XBee_Message::XBee_Message(enum message_type type, const uint8_t *payload, uint16_t length):
+// TODO: Make message part in Header 2 bytes long
+XBee_Message::XBee_Message(enum message_type type, const uint8_t *msg_payload, uint16_t msg_length):
 		type(type),
-		payload_len(length),
+		payload_len(msg_length),
 		message_part(1),	/* message part numbers start with 1 */
 		message_complete(true)	/* messages created by this constructor
 					 * are complete at construction time */
 {
 	/* calculate the number of parts required to transmit this message */
 	message_part_cnt = payload_len / (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH) + 1;
-
+	if (message_part_cnt > 255)
+		printf("Error: Message size > 20kB not supported\n");
 	/* allocate memory to copy the payload into the object */
-	this->payload = new uint8_t[payload_len];
-	memcpy(this->payload, payload, payload_len);
+	payload = new uint8_t[payload_len];
+	memcpy(payload, msg_payload, payload_len);
 	/* allocate memory for the message buffer */
 	message_buffer = allocate_msg_buffer(payload_len);
 }
@@ -191,8 +192,8 @@ XBee_Message::XBee_Message(const uint8_t *message):
 		message_part_cnt(message[MSG_PART_CNT])
 {
 	/* allocate memory to copy the payload into the object */
-	this->payload = new uint8_t[payload_len];
-	memcpy(this->payload, &message[MSG_HEADER_LENGTH], payload_len);
+	payload = new uint8_t[payload_len];
+	memcpy(payload, &message[MSG_HEADER_LENGTH], payload_len);
 
 	/* determine if the message is complete, or just a part of a longer
 	 * message */
@@ -251,6 +252,8 @@ XBee_Message& XBee_Message::operator=(const XBee_Message& msg) {
 }
 
 XBee_Message::~XBee_Message() {
+	printf("del msg - pl: %u, part: %u, part_cnt: %u, pl_addr: %x, buf_add: %x\n",
+	payload_len, message_part, message_part_cnt, (uint)payload, (uint)message_buffer);
 	if (payload)
 		delete[] payload;
 	if (message_buffer)
@@ -313,7 +316,7 @@ bool XBee_Message::append_msg(const uint8_t *data) {
  * The message_buffer is constructed on the fly into a preallocated and fixed
  * memory space.
  * The content of the memory space is overwritten each time this function is called */
-uint8_t* XBee_Message::get_msg(uint8_t part = 1) {
+uint8_t* XBee_Message::get_msg(uint16_t part = 1) {
 	uint16_t length = payload_len;
 	uint16_t overhead_len;
 	uint16_t offset = 0;
@@ -341,13 +344,14 @@ uint8_t* XBee_Message::get_msg(uint8_t part = 1) {
 	message_buffer[MSG_PART_CNT] = message_part_cnt;
 	message_buffer[MSG_PAYLOAD_LENGTH] = length;
 	/* copy payload into message body */
+	printf("copy memory offset: %u length: %u\n", offset, length);
 	memcpy(&message_buffer[MSG_HEADER_LENGTH], &payload[offset], length);
 
 	return message_buffer;
 }
 
 /* returns the length of the requested part of the message (including header) */
-uint16_t XBee_Message::get_msg_len(uint8_t part = 1) {
+uint16_t XBee_Message::get_msg_len(uint16_t part = 1) {
 	/* check if memory was allocated for the message_buffer, and see
 	 * get_msg function for explanation */
 	if (!message_buffer)
@@ -371,13 +375,12 @@ uint16_t XBee_Message::get_msg_len(uint8_t part = 1) {
 /* allocates memory in for the message buffer in a XBee_Message object.
  * The size of the memory depends on the the fact if the payload will fit
  * into one transmission or has to be split up */
-uint8_t* XBee_Message::allocate_msg_buffer(uint8_t payload_len) {
+uint8_t* XBee_Message::allocate_msg_buffer(uint16_t payload_len) {
 	uint8_t *message_buffer;
-	uint8_t msg_part_cnt;
+	uint16_t msg_part_cnt;
 	
 	/* calculate the number of parts required to transmit this message */
 	msg_part_cnt = payload_len / (XBEE_MSG_LENGTH - MSG_HEADER_LENGTH) + 1;
-	
 	/* allocate memory for the message buffer */
 	if (msg_part_cnt > 1) {
 		/* message has to be split into multiple parts, but each
@@ -693,7 +696,7 @@ uint8_t XBee::xbee_send(XBee_Message& msg, uint16_t addr16, uint32_t addr64h, ui
 		/* check the transmission status of message part*/
 		error_code = gbeeReceive(gbee_handle, &frame, &length, &timeout);
 		if (error_code != GBEE_NO_ERROR) {
-			printf("Error receiving transmission, status message: error= %s\n",
+			printf("Error receiving transmission status, status message: error= %s\n",
 			gbeeUtilCodeToString(error_code));
 			tx_status = 0xFF;	/* -> Unknown Tx Status */
 			break;
@@ -720,34 +723,5 @@ uint8_t* XBee::at_cmd_str(const std::string at_cmd_str) {
 
 #define DTA_SIZE 400
 void XBee::xbee_test_msg() {
-	uint8_t test_data[DTA_SIZE];
-	uint8_t *payload;
-	uint16_t length;
 
-	/* create random test data */
-	for (int i = 0; i < DTA_SIZE; i++) {
-		test_data[i] = rand() % 255;
-		printf("%02x ", test_data[i]);
-	}
-	printf("\n");
-	XBee_Message msg(DATA, test_data, DTA_SIZE);
-	XBee_Message msg_des;
-	
-	for (int i = 1; i <= msg.message_part_cnt; i++) {
-		msg_des.append_msg(msg.get_msg(i));
-	}
-	
-	payload = msg_des.get_payload(&length);
-	for (int i = 0; i < length; i++)
-		printf("%02x ",payload[i]);
-	printf("\n");
-	
-	/* test the util function for reading a register value */
-	GBeeError error_code;
-	uint8_t value[20];
-	uint16_t ln;
-	uint16_t max_length = 20;
-	error_code = gbeeUtilReadRegister(gbee_handle, "MY", value, &ln, max_length);
-	printf("Status: %s\n", gbeeUtilCodeToString(error_code));
-	printf("MY: %02x %02x, ln: %u\n", value[0], value[1], ln);
 }

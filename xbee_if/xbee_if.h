@@ -125,20 +125,19 @@ public:
 	uint8_t* get_payload(uint16_t *length);
 	enum message_type get_type();
 	bool is_complete();
-
 private:
 	bool append_msg(const XBee_Message &msg);
 	bool append_msg(const uint8_t *data);
-	uint8_t* get_msg(uint8_t part);
-	uint16_t get_msg_len(uint8_t part);
-	uint8_t* allocate_msg_buffer(uint8_t payload_length);
+	uint8_t* get_msg(uint16_t part);
+	uint16_t get_msg_len(uint16_t part);
+	uint8_t* allocate_msg_buffer(uint16_t payload_length);
 
 	uint8_t *message_buffer;
 	uint8_t *payload;
 	enum message_type type;
 	uint16_t payload_len;
 	uint8_t message_part;
-	uint8_t message_part_cnt;
+	uint16_t message_part_cnt;
 	bool message_complete;
 };
 
