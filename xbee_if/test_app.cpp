@@ -21,14 +21,16 @@
 #include <gbee-util.h>
 #include <array> 
 #include <unistd.h>
+#include <sys/time.h>
 
 const char* hex_str(uint8_t *data, uint8_t length);
+XBee_Message get_message(uint16_t size);
+void speed_measurement(XBee* interface, uint16_t size, uint8_t iterations);
 
 int main(int argc, char **argv) {
 	uint8_t pan_id[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0xAB, 0xBC, 0xCD};
-	uint8_t unique_id = 2;
 	uint8_t error_code;
-	XBee_Config config("/dev/ttyUSB0", "Denver", false, unique_id, pan_id, 9000);
+	XBee_Config config("/dev/ttyUSB0", "denver", false, pan_id, 500, B115200, 1);
 	
 	XBee interface(config);
 	error_code = interface.xbee_init();
@@ -36,40 +38,26 @@ int main(int argc, char **argv) {
 		printf("Error: unable to configure device, code: %02x\n", error_code);
 		return 0;
 	}
+	interface.xbee_status();
+	//speed_measurement(&interface, 1024, 10);
 
-	for (int i=0; i < 1; i++) {
-		interface.xbee_status();
-		sleep(2);
+	XBee_Message *rcv_msg = NULL;
+	uint16_t length = 0;
+	uint8_t *payload;
+	while (true) {
+		if (interface.xbee_bytes_available()) {
+			rcv_msg = interface.xbee_receive_message();
+			if ( rcv_msg->is_complete()) {
+				rcv_msg->get_payload(&length);
+				printf("%s msg received., length: %u\n",
+				rcv_msg->is_complete() ? "complete" : "incomplete", length);
+				payload = rcv_msg->get_payload(&length);
+				printf("content: %s\n", hex_str(payload, length));
+			}
+			delete rcv_msg;
+		}
+		usleep(200);
 	}
-
-	/* print some information about the current network status */
-	XBee_At_Command cmd("MY");
-	interface.xbee_at_command(cmd);
-	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-
-	cmd = XBee_At_Command("ID");
-	interface.xbee_at_command(cmd);
-	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-
-	cmd = XBee_At_Command("NI");
-	interface.xbee_at_command(cmd);
-	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-
-	cmd = XBee_At_Command("NP");
-	interface.xbee_at_command(cmd);
-	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-
-	cmd = XBee_At_Command("SH");
-	interface.xbee_at_command(cmd);
-	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-	cmd = XBee_At_Command("SL");
-	interface.xbee_at_command(cmd);
-	printf("%s: %s\n", cmd.at_command.c_str(), hex_str(cmd.data, cmd.length));
-
-	const XBee_Address *addr = interface.xbee_get_address("coordinator");
-	printf("Address of %s: 16bit: %04x, 64bith: %08x, 64bitl: %08x\n", addr->node.c_str(), 
-	addr->addr16, addr->addr64h, addr->addr64l);
-
 	return 0;
 }
 
@@ -79,3 +67,42 @@ const char* hex_str(uint8_t *data, uint8_t length) {
 		sprintf(&c_str[i*3], "%02x ", data[i]);
 	return c_str;
 }
+
+XBee_Message get_message(uint16_t size) {
+	uint8_t *payload = new uint8_t[size];
+
+	for (int i = 0; i < size; i++) {
+		payload[i] = (uint8_t)i % 255;
+	}
+	XBee_Message test_msg(payload, size);
+	delete[] payload;
+
+	return test_msg; 
+}
+
+void speed_measurement(XBee* interface, uint16_t size, uint8_t iterations) {
+	struct timeval start, end;
+	long mtime, seconds, useconds;
+	uint8_t error_code;  
+	XBee_Message test_msg = get_message(size);
+
+	gettimeofday(&start, NULL);
+	for (int i = 0; i < iterations; i++) {
+		test_msg = get_message(size);
+		if ((error_code = interface->xbee_send_to_node(test_msg, "coordinator"))!= 0x00) {
+			printf("Error transmitting: %u\n", error_code);
+			break;
+		}
+		printf("Successfully transmitted msg %u with \n", i+1);
+	}
+	gettimeofday(&end, NULL);
+
+	seconds  = end.tv_sec  - start.tv_sec;
+	useconds = end.tv_usec - start.tv_usec;
+
+	mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5;
+
+	printf("Elapsed time: %ld milliseconds\n", mtime);
+	printf("Data throughput: %.1f kB/s\n", (iterations * size) / (float) mtime);
+}
+
