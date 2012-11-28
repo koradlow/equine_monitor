@@ -24,8 +24,8 @@
 #include <sys/time.h>
 
 const char* hex_str(uint8_t *data, uint8_t length);
-XBee_Message get_message(uint16_t size);
-void speed_measurement(XBee* interface, uint16_t size, uint8_t iterations);
+XBee_Message get_message(const std::string &dest, uint16_t size);
+void speed_measurement(XBee* interface, const std::string &dest, uint16_t size, uint8_t iterations);
 
 int main(int argc, char **argv) {
 	uint8_t pan_id[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0xAB, 0xBC, 0xCD};
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 	interface.xbee_status();
-	//speed_measurement(&interface, 1024, 10);
+	speed_measurement(&interface, "coordinator", 1024, 10);
 
 	XBee_Message *rcv_msg = NULL;
 	uint16_t length = 0;
@@ -68,28 +68,32 @@ const char* hex_str(uint8_t *data, uint8_t length) {
 	return c_str;
 }
 
-XBee_Message get_message(uint16_t size) {
+XBee_Message get_message(XBee* interface, const std::string &dest, uint16_t size) {
+	const XBee_Address *addr = interface->xbee_get_address(dest);
+	if (!addr) {
+		printf("Error getting address for node %s\n", dest.c_str());
+		return XBee_Message();
+	}
 	uint8_t *payload = new uint8_t[size];
-
+	
 	for (int i = 0; i < size; i++) {
 		payload[i] = (uint8_t)i % 255;
 	}
-	XBee_Message test_msg(payload, size);
+	XBee_Message test_msg(*addr, payload, size);
 	delete[] payload;
 
 	return test_msg; 
 }
 
-void speed_measurement(XBee* interface, uint16_t size, uint8_t iterations) {
+void speed_measurement(XBee* interface, const std::string &dest, uint16_t size, uint8_t iterations) {
 	struct timeval start, end;
 	long mtime, seconds, useconds;
 	uint8_t error_code;  
-	XBee_Message test_msg = get_message(size);
+	XBee_Message test_msg = get_message(interface, dest, size);
 
 	gettimeofday(&start, NULL);
 	for (int i = 0; i < iterations; i++) {
-		test_msg = get_message(size);
-		if ((error_code = interface->xbee_send_to_node(test_msg, "coordinator"))!= 0x00) {
+		if ((error_code = interface->xbee_send_data(test_msg))!= 0x00) {
 			printf("Error transmitting: %u\n", error_code);
 			break;
 		}
