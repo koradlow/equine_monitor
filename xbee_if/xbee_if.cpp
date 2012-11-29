@@ -54,6 +54,7 @@ XBee_Address::XBee_Address(const GBeeRxPacket *rx) :
  * command by an XBee device */
 XBee_Address::XBee_Address(const string &node, const uint8_t *payload) :
 	node(node),
+	addr16(0),
 	addr64h(0),
 	addr64l(0)
 {

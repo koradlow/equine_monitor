@@ -19,8 +19,8 @@
 #ifndef XBEE_IF
 #define XBEE_IF
 
-#include "gbee.h"
 #include "messagetypes.h"
+#include <gbee.h>
 #include <string>
 #include <inttypes.h>
 
@@ -44,7 +44,7 @@ typedef enum {
 	B38400,
 	B57600,
 	B115200 = 7
-}xbee_baud_rate ;
+} xbee_baud_rate;
 
 class XBee_Message;
 
