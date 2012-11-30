@@ -50,6 +50,11 @@ XBee_Address::XBee_Address(const GBeeRxPacket *rx) :
 	addr64l = 	GBEE_ULONG(rx->srcAddr64l);
 }
 
+/* creates one uint64_t value from the addr64h and addr64l members */
+uint64_t XBee_Address::get_addr64() const {
+	return (addr64h << 32) | addr64l;
+}
+
 /* constructor that decodes the data returned as an reply to the AT "DN"
  * command by an XBee device */
 XBee_Address::XBee_Address(const string &node, const uint8_t *payload) :
@@ -287,7 +292,7 @@ XBee_Message::~XBee_Message() {
 		delete[] message_buffer;
 }
 
-const XBee_Address& XBee_Message::get_address() {
+const XBee_Address& XBee_Message::get_address() const {
 	return address;
 }
 
@@ -296,7 +301,7 @@ uint8_t* XBee_Message::get_payload(uint16_t *length) {
 	return payload;
 }
 
-bool XBee_Message::is_complete() {
+bool XBee_Message::is_complete() const {
 	return message_complete;
 }
 
@@ -730,7 +735,7 @@ const XBee_Address* XBee::xbee_get_address(const string &node) {
 
 /* checks the buffer of the serial device for available data, and returns the
  * number of pending bytes */
-int XBee::xbee_bytes_available() {
+int XBee::xbee_bytes_available() const {
 	int bytes_available;
 	ioctl(gbee_handle->serialDevice, FIONREAD, &bytes_available);
 
