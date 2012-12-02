@@ -52,7 +52,7 @@ XBee_Address::XBee_Address(const GBeeRxPacket *rx) :
 
 /* creates one uint64_t value from the addr64h and addr64l members */
 uint64_t XBee_Address::get_addr64() const {
-	return (addr64h << 32) | addr64l;
+	return ((uint64_t)addr64h << 32) | (uint64_t)addr64l;
 }
 
 /* constructor that decodes the data returned as an reply to the AT "DN"
@@ -203,7 +203,8 @@ XBee_Message::XBee_Message(const XBee_Address &addr, const uint8_t *msg_payload,
 		module_debug_xbee("Error: Message size > 20kB not supported\n");
 	/* allocate memory to copy the payload into the object */
 	payload = new uint8_t[payload_len];
-	memcpy(payload, msg_payload, payload_len);
+	if (msg_payload != NULL)
+		memcpy(payload, msg_payload, payload_len);
 	/* allocate memory for the message buffer */
 	message_buffer = allocate_msg_buffer(payload_len);
 }

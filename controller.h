@@ -39,32 +39,6 @@ struct Settings {
 	uint8_t max_unicast_hops;
 };
 
-/*** Group of functions to deserialize messages and store the data***/
-/* a class without internal state that hides away the helper functions
- * used do de-serialize messages */
-class Message_Storage {
-public:
-	void store_msg(sqlite3 *db, XBee_Message *msg);
-private:
-	/* intermediate functions for passing data on to the store functions */
-	void store_sensor_msg(sqlite3 *db, XBee_Message *msg);
-	void store_debug_msg(sqlite3 *db, XBee_Message *msg);
-	void store_config_msg(sqlite3 *db, XBee_Message *msg);
-	
-	/* functions to store the sensor messages */
-	void store_sensor_heart(sqlite3 *db, XBee_Message *msg);
-	void store_sensor_temperature(sqlite3 *db, XBee_Message *msg);
-	void store_sensor_accelerometer(sqlite3 *db, XBee_Message *msg);
-	void store_sensor_gps(sqlite3 *db, XBee_Message *msg);
-};
-/* this function verifies that all tables that we need to store the received
- * data and configuration options exist */
-void create_db_tables(sqlite3 *db);
-
-/* this function will request the node identifier from the device identified
- * by the address and update the node table accordingly to the response */
-void update_node_table(sqlite3 *db, XBee_Address *addr);
-
 /*** Group of helper functions ***/
 /* parse the config file to set up the program settings */
 void controller_parse_cl(int argc,char **argv, struct Settings *settings);
@@ -77,5 +51,8 @@ void controller_usage_hint();
 
 /* callback function for the ini file parsing library */
 int controller_ini_cb(void* buffer, const char* section, const char* name, const char* value);
+
+/* calculate the actual temperature from the raw sensor readings */
+double calculate_temperature(double v_obj, double t_env);
 
  #endif 

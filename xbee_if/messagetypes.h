@@ -72,10 +72,6 @@ typedef PACKEDSTRUCT {
 	uint16_t samplePeriodMs;
 } ConfigSensor;
 
-typedef PACKEDSTRUCT {
-	uint8_t *data;
-} ConfigNode;
-
 // definition of subtypes for SensorMessage
 typedef PACKEDSTRUCT {
 	uint8_t degree;
