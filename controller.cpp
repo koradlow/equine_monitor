@@ -451,7 +451,8 @@ void create_db_tables(sqlite3 *db) {
 	string common_sensor_columns = "(addr64 UNSIGNED BIGINT,\
 				timestamp UNSIGNED INT,\
 				offset_ms UNSIGNED INT,";
-	string common_debug_columns = "(addr64 UNSIGNED BIGINT, ";
+	string common_debug_columns = "(addr64 UNSIGNED BIGINT,\
+				timestamp UNSIGNED INT, ";
 
 	/* create SQL command strings by concatenating the SQL command substrings
 	 * with the table name */
@@ -543,6 +544,12 @@ void Message_Storage::store_sensor_msg(sqlite3 *db, XBee_Message *msg) {
 	sensor_msg = (SensorMessage*) message_packet->payload;
 	type = sensor_msg->sensorType;
 	uint64_t addr64 = msg->get_address().get_addr64();
+	/* the monitoring devices work with a relative timestamp, because
+	 * it cannot be guaranteed that they are synced with a proper RTC.
+	 * Calculate the absolute timestamp of the endTimestampS value and
+	 * update the SensorMessage object */
+	uint32_t absEndTimestampS = time(NULL) - (message_packet->relTimestampS - sensor_msg->endTimestampS);
+	sensor_msg->endTimestampS = absEndTimestampS;
 	
 	printf("Sensor Message: %u, %u , %u\n", sensor_msg->endTimestampS, sensor_msg->sampleIntervalMs, sensor_msg->arrayLength);
 	switch (type) {
@@ -577,11 +584,17 @@ void Message_Storage::store_debug_msg(sqlite3 *db, XBee_Message *msg) {
 	message_packet = (MessagePacket *)msg->get_payload(&length);
 	debug_msg = (DebugMessage*) message_packet->payload;
 	uint64_t addr64 = msg->get_address().get_addr64();
-
+	
+	/* the monitoring devices transmit a relative timestamp.
+	 * Calculate the absolute timestamp of the debug message before
+	 * storing it the db */
+	uint32_t timestampS = time(NULL) - (message_packet->relTimestampS - debug_msg->timestampS);
+	
 	string debug_string((char *)debug_msg->debugData);
 	stringstream command_data;
 	command_data << "("
 		<< addr64 <<", "
+		<< timestampS << ", "
 		<< debug_string
 		<< ")";
 	insert_into_table(db, TABLE_DEBUG_MESSAGES, command_data.str());
