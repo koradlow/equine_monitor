@@ -39,267 +39,6 @@ static sqlite3 *db;
 
 static void signal_handler_interrupt(int signum);
 
-void test_settings(struct Settings *s) {
-	printf("%s\n", s->database_path.c_str());
-	printf("%s\n", s->config_file_path.c_str());
-	printf("%s\n", s->identifier.c_str());
-	printf("%s\n", s->tty_port.c_str());
-	printf("controller mode: %s\n", s->controller_mode ? "true" : "false");
-	printf("timeout: %u\n", s->timeout);
-	printf("baud: %u\n", (uint8_t) s->baud_rate);
-	printf("hops: %u\n", s->max_unicast_hops);
-	printf("pan: ");
-	for(uint8_t i = 0; i < 8; i++)
-		printf("%02x ", s->pan_id[i]);
-	printf("\n");
-}
-
-/* Function will de-serialize data into a MessagePacket structure.
- * data[in]: const Pointer to memory to de-serialize
- * msg[out]: Pointer to preallocated MessagePacket struct of sufficient size 
- * 
- * Hint: use size returned by XBee_Message->get_payload(&size) and add 
- * sizeof(MessagePacket) + sizeof(void*) to get the exact required size*/
-void deserialize(const uint8_t *data, MessagePacket *msg) {
-	/* !sizeof(MessagePacket) returns 12, but we do not serialize the pointer
-	 * member and can pack the mainType into the first byte of the data,
-	 * hence the serialized size of this struct is 5 Byte instead of sizeof(MessagePacket) */
-	#define  MESSAGE_PACKET_SIZE 5
-	
-	/* MessageType is always the first byte of the serialized data */
-	msg->mainType = (MessageType)data[0];
-	msg->relTimestampS = *(uint32_t *)&data[1];
-	msg->payload = (uint8_t *)&msg->payload + sizeof(msg->payload);
-	
-	/* Copy the message group specific fields into the MessagePacket */
-	SensorMessage *sensor_msg = NULL; 
-	ConfigMessage *config_msg = NULL;
-	DebugMessage *debug_msg = NULL;
-
-	switch (msg->mainType) {
-	case msgSensorData:
-		sensor_msg = (SensorMessage *)msg->payload;
-		memcpy(msg->payload, &data[MESSAGE_PACKET_SIZE], sizeof(SensorMessage));
-		sensor_msg->sensorMsgArray = (uint8_t *)&sensor_msg->sensorMsgArray + sizeof(void *);
-		break;
-	case msgSensorConfig:
-		config_msg = (ConfigMessage *)msg->payload;
-		memcpy(msg->payload, &data[MESSAGE_PACKET_SIZE], sizeof(ConfigMessage));
-		config_msg->configMsgArray = (uint8_t *)&config_msg->configMsgArray + sizeof(void *);
-		break;
-	case msgDebug:
-		debug_msg = (DebugMessage *)msg->payload;
-		memcpy(msg->payload, &data[MESSAGE_PACKET_SIZE], sizeof(DebugMessage));
-		debug_msg->debugData = (uint8_t *)&debug_msg->debugData + sizeof(void *);
-		break;
-	}
-
-	/* copy the message type specific payload */
-	if (msg->mainType == msgSensorData) {
-		/* calculate the address offset for the sensorMsgArray in the
-		 * serialized data. The offset can be found by adding the size of
-		 * the structs that come before the sensorMsgArray and deducting
-		 * the size of the pointer members of the struct, because they 
-		 * are not serialized. In this case there is one pointer member that
-		 * needs to be deducted (*sensorMsgArray in SensorMessage) */
-		int sensorMsgArrayOffset = MESSAGE_PACKET_SIZE + sizeof(SensorMessage) - sizeof(void *);
-		
-		/* copy the sensorMsgArray into the serialized data structure */
-		switch (sensor_msg->sensorType) {
-		case typeHeartRate:
-			memcpy(sensor_msg->sensorMsgArray, &data[sensorMsgArrayOffset], 
-				sensor_msg->arrayLength*sizeof(HeartRateMessage));
-			break;
-		case typeRawTemperature:
-			memcpy(sensor_msg->sensorMsgArray, &data[sensorMsgArrayOffset], 
-				sensor_msg->arrayLength*sizeof(RawTemperatureMessage));
-			break;
-		case typeAccelerometer:
-			memcpy(sensor_msg->sensorMsgArray, &data[sensorMsgArrayOffset], 
-				sensor_msg->arrayLength*sizeof(AccelerometerMessage));
-			break;
-		case typeGPS:
-			memcpy(sensor_msg->sensorMsgArray, &data[sensorMsgArrayOffset], 
-				sensor_msg->arrayLength*sizeof(GPSMessage));
-		break;
-		default:
-			printf("Cannot de-serialize messages with sensorType %u\n", sensor_msg->sensorType);
-		}
-	} else if (msg->mainType == msgSensorConfig) {
-		/* calculate the address offset for the configMsgArray in the
-		 * serialized data. See above for explanation */
-		int configMsgArrayOffset = MESSAGE_PACKET_SIZE + sizeof(ConfigMessage) - sizeof(void *);
-		
-		/* copy the configMsgArray into the serialized data structure */
-		memcpy(config_msg->configMsgArray, &data[configMsgArrayOffset], 
-				config_msg->arrayLength*sizeof(ConfigSensor));
-	} else if (msg->mainType == msgDebug) {
-		/* calculate the address offset for the debugData in the
-		 * serialized data. See above for explanation */
-		int debugDataOffset = MESSAGE_PACKET_SIZE + sizeof(DebugMessage) - sizeof(void *);
-		/* copy the debug string into the de-serialized data structure,
-		 * for now the length of the copy operation is based the first
-		 * occurrence of a terminating null byte */
-		strcpy((char *)debug_msg->debugData, (const char *)&data[debugDataOffset]);
-		}
-}
-
-/* Function will serialize data in the MessagePacket structure into continuous
- * memory area, that has to be preallocated and passed to the function 
- * msg[in]: Pointer to MessagePacket structure 
- * data[out]: Pointer to preallocated memory
- * returns: length of *data */ 
-uint16_t serialize(const MessagePacket *msg, uint8_t *data) {
-	uint16_t size = 0;
-	
-	/* copy the header information of the MessagePacket structure */
-	data[size++] = (uint8_t)msg->mainType;
-	*(uint32_t *)&data[size] = msg->relTimestampS;
-	size += sizeof(msg->relTimestampS);
- 
-	/* copy the header information of the main message groups
-	 * and set the sensorMsgArray pointer to the next element in the mem-space */
-	switch (msg->mainType) {
-	case msgSensorData:
-		memcpy(&data[size], msg->payload, sizeof(SensorMessage) - sizeof(void *)); 
-		size += sizeof(SensorMessage) - sizeof(void *);
-		break;
-	case msgSensorConfig:
-		memcpy(&data[size], msg->payload, sizeof(ConfigMessage) - sizeof(void *)); 
-		size += sizeof(ConfigMessage) - sizeof(void *);
-		break;
-	case msgDebug:
-		memcpy(&data[size], msg->payload, sizeof(DebugMessage) - sizeof(void *));
-		size += sizeof(DebugMessage) - sizeof(void *);
-		break;
-	}
-	
-	/* copy the message type specific payload */
-	if (msg->mainType == msgSensorData) {
-		const SensorMessage *sensor_msg = (const SensorMessage *)msg->payload;
-		
-		printf("SensorMsg: arrayLength %u\n", sensor_msg->arrayLength);
-		/* copy the sensorMsgArray into the serialized data structure */
-		switch (sensor_msg->sensorType) {
-		case typeHeartRate:
-			memcpy(&data[size], sensor_msg->sensorMsgArray, 
-				sensor_msg->arrayLength*sizeof(HeartRateMessage));
-			size += sensor_msg->arrayLength*sizeof(HeartRateMessage);
-			break;
-		case typeRawTemperature:
-			memcpy(&data[size], sensor_msg->sensorMsgArray, 
-				sensor_msg->arrayLength*sizeof(RawTemperatureMessage));
-			size += sensor_msg->arrayLength*sizeof(RawTemperatureMessage);
-			break;
-		case typeAccelerometer:
-			memcpy(&data[size], sensor_msg->sensorMsgArray, 
-				sensor_msg->arrayLength*sizeof(AccelerometerMessage));
-			size += sensor_msg->arrayLength*sizeof(AccelerometerMessage);
-			break;
-		case typeGPS:
-			memcpy(&data[size], sensor_msg->sensorMsgArray, 
-				sensor_msg->arrayLength*sizeof(GPSMessage));
-			size += sensor_msg->arrayLength*sizeof(GPSMessage);
-		break;
-		default:
-			printf("Cannot serialize messages with sensorType %u\n", sensor_msg->sensorType);
-		}
-	} else if (msg->mainType == msgSensorConfig) {
-		const ConfigMessage *config_msg = (const ConfigMessage *)msg->payload;
-		
-		/* copy the configMsgArray into the serialized data structure */
-		memcpy(&data[size], config_msg->configMsgArray, 
-				config_msg->arrayLength*sizeof(ConfigSensor));
-		size += config_msg->arrayLength*sizeof(ConfigSensor);
-	} else if (msg->mainType == msgDebug) {
-		DebugMessage *debug_msg = (DebugMessage *)msg->payload;
-		
-		/* copy the debug string into the de-serialized data structure,
-		 * for now the length of the copy operation is based the first
-		 * occurrence of a terminating null byte */
-		strcpy((char *)&data[size], (const char *)debug_msg->debugData);
-		size += strlen((const char *)debug_msg->debugData);
-	}
-	return size;
-}
-
-void test_serializing() {
-	/* create Message Packet */
-	const uint8_t arrayLength = 10;
-	MessagePacket msg;
-	SensorMessage sensor_msg;
-	HeartRateMessage *heart_msg_array = new HeartRateMessage[arrayLength];
-	/* set internal values of Message Packet */
-	msg.mainType = msgSensorData;
-	msg.relTimestampS = 1234567;
-	msg.payload = (uint8_t *)&sensor_msg;
-	sensor_msg.sensorType = typeHeartRate;
-	sensor_msg.endTimestampS = time(NULL);
-	sensor_msg.sampleIntervalMs = 1234;
-	sensor_msg.sensorMsgArray = (uint8_t *)heart_msg_array;
-	sensor_msg.arrayLength = arrayLength;
-	for (uint8_t i = 0; i < arrayLength; i++) {
-		heart_msg_array[i].bpm = 80 + i;
-	}
-	int msg_size = sizeof(MessagePacket) + sizeof(SensorMessage) + 10 * sizeof(HeartRateMessage);
-	printf("s(packet): %i, s(sensormsg): %i, s(heartmsg): %i \n", sizeof(MessagePacket), sizeof(SensorMessage), sizeof(HeartRateMessage));
-	/* serialize the Message Packet */
-	int ser_size;
-	uint8_t *data = new uint8_t[msg_size];
-	ser_size = serialize(&msg, data);
-	printf("size: %i, serialized size: %i\n", msg_size, ser_size);
-
-	/* deserialize the Message Packet */
-	MessagePacket *des_msg = (MessagePacket *)new uint8_t[msg_size];
-	deserialize(data, des_msg);
-	
-	/* check the values in the deserialized object */
-	SensorMessage *des_sensor_msg = (SensorMessage *)des_msg->payload;
-	printf("RelTs: %uType %u, interval %u, length %u\n", des_msg->relTimestampS, des_sensor_msg->sensorType, des_sensor_msg->sampleIntervalMs, des_sensor_msg->arrayLength);
-	HeartRateMessage *des_msg_array = (HeartRateMessage *)des_sensor_msg->sensorMsgArray;
-	for (int i = 0; i < des_sensor_msg->arrayLength; i++) {
-		printf("heart rate %i: %u\n", 0, des_msg_array[i].bpm);
-	}
-}
-void test_msg_storing(sqlite3 *db) {
-	const uint8_t arrayLength = 10;
-	uint16_t msg_size;
-	Message_Storage storage;
-	MessagePacket msg;
-	SensorMessage sensor_msg;
-	HeartRateMessage *heart_msg_array = new HeartRateMessage[arrayLength];
-	
-	msg_size = sizeof(MessagePacket) + sizeof(SensorMessage) + 10 * sizeof(HeartRateMessage);
-	printf("msg_size: %u ", msg_size);
-	XBee_Address addr;
-	XBee_Message xbee_msg(addr, NULL, msg_size);
-	printf(" : %u\n", msg_size);
-	
-	msg.mainType = msgSensorData;
-	msg.payload = (uint8_t *)&sensor_msg;
-	sensor_msg.sensorType = typeHeartRate;
-	sensor_msg.endTimestampS = time(NULL);
-	sensor_msg.sampleIntervalMs = 100;
-	sensor_msg.arrayLength = arrayLength;
-	sensor_msg.sensorMsgArray = (uint8_t *)heart_msg_array;
-	
-	for (uint8_t i = 0; i < arrayLength; i++) {
-		heart_msg_array[i].bpm = 80 + i;
-		printf("heart rate %i: %u\n", 0, heart_msg_array[i].bpm);
-	}
-	
-	uint8_t *data = xbee_msg.get_payload(&msg_size);
-	serialize(&msg, data);
-
-	MessagePacket *deserialized_msg = (MessagePacket *)new uint8_t[msg_size];
-	deserialize(data, deserialized_msg);
-	
-	XBee_Message xbee_msg_copy(xbee_msg);
-	delete[] heart_msg_array;
-	
-	storage.store_msg(db, &xbee_msg_copy);
-}
-
 int main(int argc, char** argv){
 	/* register signal handler for interrupt signal, to exit gracefully */
 	signal(SIGINT, signal_handler_interrupt);
@@ -307,21 +46,18 @@ int main(int argc, char** argv){
 	/* try to load the settings from the config file */
 	struct Settings settings;
 	controller_parse_cl(argc, argv, &settings);
-	
-	test_settings(&settings);
-	
+
 	/* setup XBee interface with settings from config file */
-	/*
 	XBee_Config config(settings.tty_port, settings.identifier, settings.controller_mode,
 			settings.pan_id, settings.timeout, settings.baud_rate, settings.max_unicast_hops);
 	XBee interface(config);
 	if (interface.xbee_init() != GBEE_NO_ERROR) {
 		printf("Error: unable to configure XBee device");
-		return 0;
+		return -1;
 	}
 	while (interface.xbee_status());
-		printf("Successfully formed or joined ZigBee Network\n");
-	*/
+	printf("Successfully formed or joined ZigBee Network\n");
+
 	/* connect to the database, and set it up */
 	int error_code;
 	sqlite3 *db;
@@ -329,28 +65,28 @@ int main(int argc, char** argv){
 	if (error_code) {
 		printf("Error: cannot open database: %s\n", sqlite3_errmsg(db));
 		sqlite3_close(db);
-		return 1;
+		return -1;
 	}
 	create_db_tables(db);
 	
 	/* system initialization complete - start main control loop */
 	Message_Storage database;
-	printf("Testing Storing\n");
-	//test_msg_storing(db);
-	test_serializing();
+	printf("Waiting for messages\n");
 	while (1) {
 		XBee_Message *msg = NULL;
 		/* try to decode a message if there's data in the receive buffer */
-		//if (interface.xbee_bytes_available()) {
-		//	msg = interface.xbee_receive_message();
-		//}
-		/* if a message was decoded, store it in the database */
-		if (msg)
-			database.store_msg(db, msg);
+		if (interface.xbee_bytes_available()) {
+			msg = interface.xbee_receive_message();
+			/* if a message was decoded, store it in the database */
+			if (msg->is_complete()) {
+				database.store_msg(db, msg);
+			}
+			delete msg;
+		}
 		
 		// TODO: figure out if the configuration of one of the nodes
 		// was changed, and update it accordingly
-		usleep(200);
+		usleep(500);
 	}
 
 	sqlite3_close(db);
@@ -448,11 +184,11 @@ void controller_parse_cl(int argc,char **argv, struct Settings *settings) {
 void create_db_tables(sqlite3 *db) {
 	/* define common SQL command substrings */
 	string create = "CREATE TABLE IF NOT EXISTS ";
-	string common_sensor_columns = "(addr64 UNSIGNED BIGINT,\
-				timestamp UNSIGNED INT,\
-				offset_ms UNSIGNED INT,";
-	string common_debug_columns = "(addr64 UNSIGNED BIGINT,\
-				timestamp UNSIGNED INT, ";
+	string common_sensor_columns = "(addr64 UNSIGNED BIGINT, "
+				"timestamp UNSIGNED INT, "
+				"offset_ms UNSIGNED INT,";
+	string common_debug_columns = "(addr64 UNSIGNED BIGINT, "
+				"timestamp UNSIGNED INT, ";
 
 	/* create SQL command strings by concatenating the SQL command substrings
 	 * with the table name */
@@ -465,18 +201,18 @@ void create_db_tables(sqlite3 *db) {
 	/* append the custom fields of each table to the SQL commands */
 	table_heart += "bmp INT)";
 	table_temperature += "temp DOUBLE)";
-	table_accel += 	"x INT, \
-			y INT, \
-			z INT)";
-	table_gps += 	"lat_h INT, \
-			lat_min INT, \
-			lat_s INT, \
-			lat_north BOOL, \
-			long_h INT, \
-			long_min INT, \
-			long_s INT, \
-			long_west BOOL, \
-			valid_pos_fix BOOL)";
+	table_accel += 	"x INT, "
+			"y INT, "
+			"z INT)";
+	table_gps += 	"lat_h INT,"
+			"lat_min INT, "
+			"lat_s INT, "
+			"lat_north BOOL, "
+			"long_h INT, "
+			"long_min INT, "
+			"long_s INT, "
+			"long_west BOOL, "
+			"valid_pos_fix BOOL)";
 	table_debug +=	"message TEXT)";
 
 	// TODO: Remove debug print statements
