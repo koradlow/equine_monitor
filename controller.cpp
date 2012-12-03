@@ -61,8 +61,14 @@ void test_settings(struct Settings *s) {
  * Hint: use size returned by XBee_Message->get_payload(&size) and add 
  * sizeof(MessagePacket) + sizeof(void*) to get the exact required size*/
 void deserialize(const uint8_t *data, MessagePacket *msg) {
+	/* !sizeof(MessagePacket) returns 12, but we do not serialize the pointer
+	 * member and can pack the mainType into the first byte of the data,
+	 * hence the serialized size of this struct is 5 Byte instead of sizeof(MessagePacket) */
+	#define  MESSAGE_PACKET_SIZE 5
+	
 	/* MessageType is always the first byte of the serialized data */
 	msg->mainType = (MessageType)data[0];
+	msg->relTimestampS = *(uint32_t *)&data[1];
 	msg->payload = (uint8_t *)&msg->payload + sizeof(msg->payload);
 	
 	/* Copy the message group specific fields into the MessagePacket */
@@ -73,20 +79,21 @@ void deserialize(const uint8_t *data, MessagePacket *msg) {
 	switch (msg->mainType) {
 	case msgSensorData:
 		sensor_msg = (SensorMessage *)msg->payload;
-		memcpy(msg->payload, &data[1], sizeof(SensorMessage));
+		memcpy(msg->payload, &data[MESSAGE_PACKET_SIZE], sizeof(SensorMessage));
 		sensor_msg->sensorMsgArray = (uint8_t *)&sensor_msg->sensorMsgArray + sizeof(void *);
 		break;
 	case msgSensorConfig:
 		config_msg = (ConfigMessage *)msg->payload;
-		memcpy(msg->payload, &data[1], sizeof(ConfigMessage));
+		memcpy(msg->payload, &data[MESSAGE_PACKET_SIZE], sizeof(ConfigMessage));
 		config_msg->configMsgArray = (uint8_t *)&config_msg->configMsgArray + sizeof(void *);
 		break;
 	case msgDebug:
 		debug_msg = (DebugMessage *)msg->payload;
-		memcpy(msg->payload, &data[1], sizeof(DebugMessage));
+		memcpy(msg->payload, &data[MESSAGE_PACKET_SIZE], sizeof(DebugMessage));
 		debug_msg->debugData = (uint8_t *)&debug_msg->debugData + sizeof(void *);
 		break;
 	}
+
 	/* copy the message type specific payload */
 	if (msg->mainType == msgSensorData) {
 		/* calculate the address offset for the sensorMsgArray in the
@@ -94,11 +101,8 @@ void deserialize(const uint8_t *data, MessagePacket *msg) {
 		 * the structs that come before the sensorMsgArray and deducting
 		 * the size of the pointer members of the struct, because they 
 		 * are not serialized. In this case there is one pointer member that
-		 * needs to be deducted (*sensorMsgArray in SensorMessage) 
-		 * !sizeof(MessagePacket) returns 8, but we do not serialize the pointer
-		 * member and can pack the mainType into the first byte of the data,
-		 * hence the "+1" instead of sizeof(MessagePacket) */
-		int sensorMsgArrayOffset = 1 + sizeof(SensorMessage) - sizeof(void *);
+		 * needs to be deducted (*sensorMsgArray in SensorMessage) */
+		int sensorMsgArrayOffset = MESSAGE_PACKET_SIZE + sizeof(SensorMessage) - sizeof(void *);
 		
 		/* copy the sensorMsgArray into the serialized data structure */
 		switch (sensor_msg->sensorType) {
@@ -124,7 +128,7 @@ void deserialize(const uint8_t *data, MessagePacket *msg) {
 	} else if (msg->mainType == msgSensorConfig) {
 		/* calculate the address offset for the configMsgArray in the
 		 * serialized data. See above for explanation */
-		int configMsgArrayOffset = 1 + sizeof(ConfigMessage) - sizeof(void *);
+		int configMsgArrayOffset = MESSAGE_PACKET_SIZE + sizeof(ConfigMessage) - sizeof(void *);
 		
 		/* copy the configMsgArray into the serialized data structure */
 		memcpy(config_msg->configMsgArray, &data[configMsgArrayOffset], 
@@ -132,8 +136,7 @@ void deserialize(const uint8_t *data, MessagePacket *msg) {
 	} else if (msg->mainType == msgDebug) {
 		/* calculate the address offset for the debugData in the
 		 * serialized data. See above for explanation */
-		int debugDataOffset = 1 + sizeof(DebugMessage) - sizeof(void *);
-		
+		int debugDataOffset = MESSAGE_PACKET_SIZE + sizeof(DebugMessage) - sizeof(void *);
 		/* copy the debug string into the de-serialized data structure,
 		 * for now the length of the copy operation is based the first
 		 * occurrence of a terminating null byte */
@@ -149,10 +152,11 @@ void deserialize(const uint8_t *data, MessagePacket *msg) {
 uint16_t serialize(const MessagePacket *msg, uint8_t *data) {
 	uint16_t size = 0;
 	
-	/* copy the header information of the MessagePacket structure and
-	 * set the destination of the payload pointer to the next element in the mem-space */
+	/* copy the header information of the MessagePacket structure */
 	data[size++] = (uint8_t)msg->mainType;
-
+	*(uint32_t *)&data[size] = msg->relTimestampS;
+	size += sizeof(msg->relTimestampS);
+ 
 	/* copy the header information of the main message groups
 	 * and set the sensorMsgArray pointer to the next element in the mem-space */
 	switch (msg->mainType) {
@@ -227,6 +231,7 @@ void test_serializing() {
 	HeartRateMessage *heart_msg_array = new HeartRateMessage[arrayLength];
 	/* set internal values of Message Packet */
 	msg.mainType = msgSensorData;
+	msg.relTimestampS = 1234567;
 	msg.payload = (uint8_t *)&sensor_msg;
 	sensor_msg.sensorType = typeHeartRate;
 	sensor_msg.endTimestampS = time(NULL);
@@ -250,7 +255,7 @@ void test_serializing() {
 	
 	/* check the values in the deserialized object */
 	SensorMessage *des_sensor_msg = (SensorMessage *)des_msg->payload;
-	printf("Type %u, interval %u, length %u\n", des_sensor_msg->sensorType, des_sensor_msg->sampleIntervalMs, des_sensor_msg->arrayLength);
+	printf("RelTs: %uType %u, interval %u, length %u\n", des_msg->relTimestampS, des_sensor_msg->sensorType, des_sensor_msg->sampleIntervalMs, des_sensor_msg->arrayLength);
 	HeartRateMessage *des_msg_array = (HeartRateMessage *)des_sensor_msg->sensorMsgArray;
 	for (int i = 0; i < des_sensor_msg->arrayLength; i++) {
 		printf("heart rate %i: %u\n", 0, des_msg_array[i].bpm);
