@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<hgroup>
+<h3>Welcome to the online data viewer of the Equine Health Monitor System</h3>
+<h2>This web-application allows you to view the collected measurement data 
+from multiple monitoring devices from one common interface. 
+
+When the base station receives data from 
+a new monitoring device, new sub-menu entries will appear automatically, to 
+give access to data display and configuration facilities.
+<ul>
+	<li><i>Data:</i> Provides a table based overview of the collected 
+	measurement data from different sensors</li> 
+	<li><i>Config:</i> Allows you to set the timing constraints for the
+	sensors of the monitoring device, and dis-/enable sensors and
+	audio recording</li> 
+</ul>
+</h2>
+</hgroup>
+{% endblock %}

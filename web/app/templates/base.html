@@ -1,0 +1,49 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html lang="en">
+<html>
+	<head>
+		<link rel="stylesheet" href="{{url_for('static', filename='style.css')}}" />
+		{% if title %}
+			<title>GDP 2012 - Equine Health Monitor: {{title}}</title>
+		{% else %}
+			<title>GDP 2012 - Equine Health Monitor</title>
+		{% endif %}
+	</head>
+	<body>
+		<div id="container">
+		<header>
+		<!--start logo-->
+		<h1><a href="/">EquineHealthMonitor</a></h1>
+		<!--end logo-->
+		<ul id="navigation">
+			{% for item in menu %}
+			<li><a href="{{ item.href }}">{{ item.caption }}</a>
+			{% if item.submenu %}
+				<ul>
+				{% for sub_item in item.submenu %}
+				<li><a href="{{ sub_item.href }}">{{ sub_item.caption }}</a></li>
+				{% endfor %}
+				</ul>
+			{% endif %}
+			</li>
+			{% endfor %}
+		</ul> 
+		<!-- end navigation-->
+		</header>
+		<content>
+		{% block content %} {% endblock %}
+		</content>
+		<!--end content-->
+		</div>
+		<!--end container-->
+		
+		<footer>
+			<div class="container">
+				<div id="FooterOne">
+					 © GDP EMECS 2012
+				</div>
+			</div>
+		</footer>
+		
+	</body>
+</html>
