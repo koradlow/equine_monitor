@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+{% if horse_id %}
+<section id="Intro">
+	<hgroup>
+	<h3>Displaying debug information for <b>{{ horse_id }}</b></h3>
+	<h2>The following table shows all debug strings issued by {{horse_id}}. 
+	The messages are sorted by the time they were dispatched, showing the most recent value first</h2>
+	</hgroup>
+</section>
+
+<!-- Table contents -->
+<section class="holder_content">
+{% for table in tables %}
+<h3>Data for {{table[0]}} of {{horse_id}}</h3>
+<table class="tabelle" id="scrollTabelle" cellpadding="0" cellspacing="0">
+	<thead>
+	<tr>
+		{% for row_key in table[1] %}
+		<th>{{row_key}}</th>
+		{% endfor %}
+	</tr>
+	</thead>
+	<tbody>
+	{% for row in table[2] %}
+	<tr>
+		{% for row_key in row %}
+		<td>{{row[row_key]}}</td>
+		{% endfor %}
+	</tr>
+	{% endfor %}
+	</tbody>
+</table>
+{% endfor %}
+</section>
+<!-- end Table contents -->
+{% else %}
+<section id="Intro">
+<hgroup>
+<h3>Welcome to the online data viewer of the Equine Health Monitor System</h3>
+<h2>Please select a node from the dropdown menu</h2>
+</hgroup>
+</section>
+{% endif %}
+{% endblock %}
+
+
+ 
+
+
+

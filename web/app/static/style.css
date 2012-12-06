@@ -178,9 +178,9 @@ table.tabelle td,th {
 /* Begin Navigation Bar Styling */
 .navigation {
 	position: absolute;
-	width: 320px;
+	width: 420px;
 	top: 15px;
-	left: 620px;
+	left: 520px;
 	float: left;			/* make it horizontal */
 	list-style: none;		/* remove bullet points */
 	border-top: 1px solid #A3A3A3;

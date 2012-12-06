@@ -8,13 +8,14 @@ from flask import g
 from app import app
 
 # Constant defines for the program
-DATABASE = "test.db"
+DATABASE = "equine.db"
 TABLENAMES = { 'heart': 'sensorHeart',
 		'temp' : 'sensorTemperature',
 		'accel' : 'sensorAccelerometer',
 		'gps' : 'sensorGPS',
 		'debug' : 'debugMessages',
 		'nodes' : 'monitoringNodes' }
+TABLE_LENGTH = '50'
 
 # Display URL functions
 @app.route("/index")
@@ -46,6 +47,11 @@ def display_sensor_data(horse_id, sensor_id):
 def display_status():
 	return render_template("status.html", menu = get_main_menu())
 
+@app.route('/debug/', defaults={'horse_id': ''})
+@app.route("/debug/<horse_id>")
+def display_data(horse_id):
+	return render_template("debug.html", title = horse_id, menu = get_main_menu(), horse_id = horse_id, tables = {})
+
 # Helper functions
 
 # loads all items in the monitoringNodes table and puts them into a list
@@ -63,7 +69,8 @@ def get_node_list(basepath):
 def get_main_menu():
 	menu = [ {'href' : '/data', 'caption' : 'Data', 'submenu' : get_node_list('/data/')},
 		{'href' : '/config', 'caption' : 'Config', 'submenu' : get_node_list('/config/')},
-		{'href' : '/status', 'caption' : 'Status' }
+		{'href' : '/status', 'caption' : 'Status' },
+		{'href' : '/debug', 'caption' : 'Debug', 'submenu' : get_node_list('/data/')}
 		]
 	return menu
 
@@ -73,7 +80,7 @@ def get_sensor_menu(horse_id):
 	sensor_menu = 	 [ {'href' : '/data/'+horse_id+'/heart', 'caption' : 'Heart'},
 		{'href' : '/data/'+horse_id+'/temp', 'caption' : 'Temperature'},
 		{'href' : '/data/'+horse_id+'/accel', 'caption' : 'Accelerometer'},
-		{'href' : '/data/'+horse_id+'/gps', 'caption' : 'GPS'},
+		{'href' : '/data/'+horse_id+'/gps', 'caption' : 'GPS'}
 		]
 	return sensor_menu
 
@@ -82,11 +89,11 @@ def get_table(tablename, horse_id=None):
 	table = []
 	if(horse_id):
 		address = get_addr64(horse_id)
-		heart_table = query_db('SELECT * FROM ' + tablename + ' WHERE addr64='+address)
+		heart_table = query_db('SELECT * FROM ' + tablename + ' WHERE addr64=' + address + ' LIMIT ' + TABLE_LENGTH)
 		if (heart_table):
 			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
 	else:
-		heart_table = query_db('SELECT * FROM ' + tablename)
+		heart_table = query_db('SELECT * FROM ' + tablename + ' LIMIT ' + TABLE_LENGTH)
 		if (heart_table):
 			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
 	return table
