@@ -10,12 +10,12 @@
 		{% endif %}
 	</head>
 	<body>
-		<div id="container">
+		<div id="Container">
 		<header>
 		<!--start logo-->
 		<h1><a href="/">EquineHealthMonitor</a></h1>
 		<!--end logo-->
-		<ul id="navigation">
+		<ul class="navigation">
 			{% for item in menu %}
 			<li><a href="{{ item.href }}">{{ item.caption }}</a>
 			{% if item.submenu %}
@@ -36,13 +36,8 @@
 		<!--end content-->
 		</div>
 		<!--end container-->
-		
 		<footer>
-			<div class="container">
-				<div id="FooterOne">
-					 © GDP EMECS 2012
-				</div>
-			</div>
+			<div id="FooterOne"> © GDP EMECS 2012</div>
 		</footer>
 		
 	</body>

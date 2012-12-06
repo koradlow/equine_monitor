@@ -1,26 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<script src="//ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.js"></script>
-<!-- fallback for jquery.js -->
-<script>window.jQuery || document.write('<script src="{{url_for('static', filename='jquery.js') }}">\x3C/script>')
-</script>
-<script type="text/javascript">
-		jQuery(document).ready(function() {
-			$("a").click(function(event){
-				alert("Thanks for visiting!");
-			});
-		});
- 	</script>
- 
 {% if horse_id %}
-<hgroup>
-<h3>Data for: {{ horse_id }}</h3>
-<h2>The following tables show all the data that has been collected so far
-for the horse {{horse_id}}. Each sensor has it's own table and the data is
-sorted by the time the measurement was taken, showing the most recent value first</h2>
-</hgroup>
+<!-- Submenu for sensor Types -->
+<section id="Submenu">
+	<ul class="navigation navigation_sensor">
+		{% for item in sensor_menu %}
+		<li><a href="{{ item.href }}">{{ item.caption }}</a>
+		{% endfor %}
+	</ul>
+</section>
+<section id="Intro">
+	<hgroup>
+	<h3>Displaying data for <b>{{ horse_id }}</b></h3>
+	<h2>The following tables show all the data that has been collected so far
+	for the node {{horse_id}}. Each sensor has it's own table and the data is
+	sorted by the time the measurement was taken, showing the most recent value first</h2>
+	</hgroup>
+</section>
+
+<!-- Table contents -->
+<section class="holder_content">
 {% for table in tables %}
-<h3>Table: {{table[0]}}</h3>
+<h3>Data for {{table[0]}} of {{horse_id}}</h3>
 <table class="tabelle" id="scrollTabelle" cellpadding="0" cellspacing="0">
 	<thead>
 	<tr>
@@ -40,8 +41,15 @@ sorted by the time the measurement was taken, showing the most recent value firs
 	</tbody>
 </table>
 {% endfor %}
+</section>
+<!-- end Table contents -->
 {% else %}
-Please select a horse from the dropdown menu
+<section id="Intro">
+<hgroup>
+<h3>Welcome to the online data viewer of the Equine Health Monitor System</h3>
+<h2>Please select a node from the dropdown menu</h2>
+</hgroup>
+</section>
 {% endif %}
 {% endblock %}
 

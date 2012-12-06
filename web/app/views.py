@@ -1,12 +1,22 @@
 import sqlite3
+import time
 import pprint
 from flask import render_template
 from flask import url_for
+from flask import request
 from flask import g
 from app import app
 
+# Constant defines for the program
 DATABASE = "test.db"
+TABLENAMES = { 'heart': 'sensorHeart',
+		'temp' : 'sensorTemperature',
+		'accel' : 'sensorAccelerometer',
+		'gps' : 'sensorGPS',
+		'debug' : 'debugMessages',
+		'nodes' : 'monitoringNodes' }
 
+# Display URL functions
 @app.route("/index")
 @app.route("/")
 def index():
@@ -21,14 +31,25 @@ def display_config(horse_id):
 @app.route("/data/<horse_id>")
 def display_data(horse_id):
 	return render_template("data.html", title = horse_id, menu = get_main_menu() , 
-	horse_id = horse_id, tables = get_tables(horse_id))
+	sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id, tables = {})
+
+@app.route("/data/<horse_id>/<sensor_id>")
+def display_sensor_data(horse_id, sensor_id):
+	print horse_id
+	print sensor_id
+	table = TABLENAMES[sensor_id] if TABLENAMES.has_key(sensor_id) else ''
+	print table
+	return render_template("data.html", title = horse_id, menu = get_main_menu(),
+	sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id, tables = get_table(table, horse_id))
 
 @app.route('/status')
 def display_status():
 	return render_template("status.html", menu = get_main_menu())
 
+# Helper functions
+
 # loads all items in the monitoringNodes table and puts them into a list
-# with the indexes 'href' and 'caption'
+# of dictionaries with the indexes 'href' and 'caption'
 def get_node_list(basepath):
 	node_list = []
 	test = query_db('SELECT * FROM monitoringNodes')
@@ -37,6 +58,8 @@ def get_node_list(basepath):
 		node_list.append({ 'href' : link_destination, 'caption' : node['identifier']})
 	return node_list
 
+# returns the items of the main menu in a list of dictionaries with the
+# keys 'href', 'caption' and 'submenu' (list of dictionaries with same keys)
 def get_main_menu():
 	menu = [ {'href' : '/data', 'caption' : 'Data', 'submenu' : get_node_list('/data/')},
 		{'href' : '/config', 'caption' : 'Config', 'submenu' : get_node_list('/config/')},
@@ -44,16 +67,36 @@ def get_main_menu():
 		]
 	return menu
 
-def get_tables(horse_id=None):
+# returns the items of the sensor menu in a list of dictionaries with the
+# keys 'href' and 'caption'
+def get_sensor_menu(horse_id):
+	sensor_menu = 	 [ {'href' : '/data/'+horse_id+'/heart', 'caption' : 'Heart'},
+		{'href' : '/data/'+horse_id+'/temp', 'caption' : 'Temperature'},
+		{'href' : '/data/'+horse_id+'/accel', 'caption' : 'Accelerometer'},
+		{'href' : '/data/'+horse_id+'/gps', 'caption' : 'GPS'},
+		]
+	return sensor_menu
+
+# returns the items of the table where the addr64(horse_id) == table.row.addr64 
+def get_table(tablename, horse_id=None):
 	table = []
 	if(horse_id):
 		address = get_addr64(horse_id)
-		print address
-		heart_table = query_db('SELECT * FROM sensorHeart WHERE addr64='+address)
+		heart_table = query_db('SELECT * FROM ' + tablename + ' WHERE addr64='+address)
 		if (heart_table):
-			table.append(['Heart Rate Sensor', heart_table[0].keys(), heart_table])
+			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
+	else:
+		heart_table = query_db('SELECT * FROM ' + tablename)
+		if (heart_table):
+			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
 	return table
 
+def replace_timestamp(table):
+	for row in table:
+		row['timestamp'] = time.ctime(int(row['timestamp']))
+	return table
+
+# TODO: Implement setting of Node identifier for horse from web interface
 def get_addr64(horse_id):
 	addr64 = 101010
 	nodes = query_db('SELECT * from monitoringNodes')
