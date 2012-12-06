@@ -441,7 +441,8 @@ XBee::XBee(XBee_Config& config) :
 {}
 
 XBee::~XBee() {
-	gbeeDestroy(gbee_handle);
+	if (gbee_handle)
+		gbeeDestroy(gbee_handle);
 	for (int i = 0; i < address_cache_size; i++)
 		delete address_cache[i];
 }

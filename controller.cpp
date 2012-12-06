@@ -47,16 +47,16 @@ int main(int argc, char** argv){
 	struct Settings settings;
 	controller_parse_cl(argc, argv, &settings);
 
-	/* setup XBee interface with settings from config file */
-	XBee_Config config(settings.tty_port, settings.identifier, settings.controller_mode,
-			settings.pan_id, settings.timeout, settings.baud_rate, settings.max_unicast_hops);
-	XBee interface(config);
-	if (interface.xbee_init() != GBEE_NO_ERROR) {
-		printf("Error: unable to configure XBee device");
-		return -1;
-	}
-	while (interface.xbee_status());
-	printf("Successfully formed or joined ZigBee Network\n");
+	///* setup XBee interface with settings from config file */
+	//XBee_Config config(settings.tty_port, settings.identifier, settings.controller_mode,
+			//settings.pan_id, settings.timeout, settings.baud_rate, settings.max_unicast_hops);
+	//XBee interface(config);
+	//if (interface.xbee_init() != GBEE_NO_ERROR) {
+		//printf("Error: unable to configure XBee device");
+		//return -1;
+	//}
+	//while (interface.xbee_status());
+	//printf("Successfully formed or joined ZigBee Network\n");
 
 	/* connect to the database, and set it up */
 	int error_code;
@@ -75,14 +75,14 @@ int main(int argc, char** argv){
 	while (1) {
 		XBee_Message *msg = NULL;
 		/* try to decode a message if there's data in the receive buffer */
-		if (interface.xbee_bytes_available()) {
-			msg = interface.xbee_receive_message();
-			/* if a message was decoded, store it in the database */
-			if (msg->is_complete()) {
-				database.store_msg(db, msg);
-			}
-			delete msg;
-		}
+		//if (interface.xbee_bytes_available()) {
+			//msg = interface.xbee_receive_message();
+			///* if a message was decoded, store it in the database */
+			//if (msg->is_complete()) {
+				//database.store_msg(db, msg);
+			//}
+			//delete msg;
+		//}
 		
 		// TODO: figure out if the configuration of one of the nodes
 		// was changed, and update it accordingly
@@ -189,6 +189,9 @@ void create_db_tables(sqlite3 *db) {
 				"offset_ms UNSIGNED INT,";
 	string common_debug_columns = "(addr64 UNSIGNED BIGINT, "
 				"timestamp UNSIGNED INT, ";
+	string common_node_columns = "(addr64 UNSIGNED BIGINT UNIQUE, "
+				"addr16 UNSIGNED INT, "
+				"identifier VARCHAR(20))";
 
 	/* create SQL command strings by concatenating the SQL command substrings
 	 * with the table name */
@@ -197,7 +200,8 @@ void create_db_tables(sqlite3 *db) {
 	string table_accel = create + TABLE_SENSOR_ACCEL + common_sensor_columns;
 	string table_gps = create + TABLE_SENSOR_GPS + common_sensor_columns;
 	string table_debug = create + TABLE_DEBUG_MESSAGES + common_debug_columns;
-
+	string table_nodes = create + TABLE_MONITORING_NODES + common_node_columns;
+	
 	/* append the custom fields of each table to the SQL commands */
 	table_heart += "bmp INT)";
 	table_temperature += "temp DOUBLE)";
@@ -221,6 +225,7 @@ void create_db_tables(sqlite3 *db) {
 	printf("%s \n", table_accel.c_str());
 	printf("%s \n", table_gps.c_str());
 	printf("%s \n", table_debug.c_str());
+	printf("%s \n", table_nodes.c_str());
 	
 	/* try to create the tables */
 	CALL_SQLITE(exec(db, table_heart.c_str(), 0, 0, 0));
@@ -228,6 +233,7 @@ void create_db_tables(sqlite3 *db) {
 	CALL_SQLITE(exec(db, table_accel.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_gps.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_debug.c_str(), 0, 0, 0));
+	CALL_SQLITE(exec(db, table_nodes.c_str(), 0, 0, 0));
 }
 
 /* inserts one new row of data in the table identified by the table parameter.
@@ -251,22 +257,34 @@ void insert_into_table(sqlite3 *db, const string &table, const string &values) {
  * decoder function */
 void Message_Storage::store_msg(sqlite3 *db, XBee_Message *msg) {
 	uint16_t length;
-	MessagePacket *message_packet;
+	uint8_t *data;
 	
-	message_packet = (MessagePacket *)msg->get_payload(&length);
-
+	/* de-serialze the message */
+	data = msg->get_payload(&length);
+	MessagePacket *message_packet = (MessagePacket *) new uint8_t[length+10];
+	deserialize(data, message_packet);
+	
+	/* store messages into the appropriate db tables */
 	switch (message_packet->mainType) {
 	case msgSensorData:
 		printf("storing sensor message\n");
 		store_sensor_msg(db, msg);
 		break;
 	case msgSensorConfig:
+		printf("storing config message\n");
 		store_config_msg(db, msg);
 		break;
 	case msgDebug:
+		printf("storing debug message\n");
 		store_debug_msg(db, msg);
 		break;
+	default: 
+		printf("message with unknown mainType: %u\n", message_packet->mainType);
 	}
+	/* try to store the source address in the database */
+	store_address(db, msg->get_address());
+	
+	delete[] message_packet;
 }
 
 /* checks the type of sensor messages and passes them on the the correct store function */
@@ -335,6 +353,17 @@ void Message_Storage::store_debug_msg(sqlite3 *db, XBee_Message *msg) {
 		<< ")";
 	insert_into_table(db, TABLE_DEBUG_MESSAGES, command_data.str());
 	printf("%s \n", command_data.str().c_str());
+}
+
+/* tries to store the source address of the message in the db */
+void Message_Storage::store_address(sqlite3 *db, const XBee_Address &addr) {
+	stringstream command_data;
+	command_data << "("
+		<< addr.get_addr64() << ", "
+		<< addr.addr16 << ", "
+		<< "TBI" 
+		<< ")";
+	insert_into_table(db, TABLE_MONITORING_NODES, command_data.str());
 }
 
 void Message_Storage::store_sensor_heart(sqlite3 *db,

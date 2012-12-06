@@ -25,6 +25,7 @@
 #define TABLE_SENSOR_ACCEL "sensorAccelerometer"
 #define TABLE_SENSOR_GPS "sensorGPS"
 #define TABLE_DEBUG_MESSAGES "debugMessages"
+#define TABLE_MONITORING_NODES "monitoringNodes"
 
 #define CALL_SQLITE(FUNC) 						\
 {									\
@@ -53,6 +54,7 @@ class Message_Storage {
 public:
 	void store_msg(sqlite3 *db, XBee_Message *msg);
 private:
+	void store_address(sqlite3 *db, const XBee_Address &addr);
 	/* intermediate functions for passing data on to the store functions */
 	void store_sensor_msg(sqlite3 *db, XBee_Message *msg);
 	void store_debug_msg(sqlite3 *db, XBee_Message *msg);
