@@ -9,6 +9,8 @@
 #ifndef DEBUGOUTPUTCONTROL_H
 #define DEBUGOUTPUTCONTROL_H
 
+#include <stdio.h>
+
 // ************************************************************************
 // Use the statement below to disable ALL debug outputs, takes priority
 // over sections below
@@ -24,20 +26,11 @@
 // ************************************************************************
 
 #ifndef DISABLE_ALL_DEBUG_OUTPUTS
-
-#define ENABLE_DEBUG_OUTPUT_XBEE
+#define nENABLE_DEBUG_OUTPUT_XBEE
+#define ENABLE_DEBUG_OUTPUT_STRG
 
 #endif
 
-// ************************************************************************
-// Implementations for debug functions
-// No need to make changes here, modify statements above instead
-// ************************************************************************
-
-#ifdef ENABLE_DEBUG_OUTPUT_XBEE
-#define module_debug_xbee(fmt, ...)   printf("XBee: "fmt"\n", ##__VA_ARGS__)
-#else
-#define module_debug_xbee(fmt, ...)
-#endif
+#include "debug_output_impl.h"
 
 #endif // DEBUGOUTPUTCONTROL_H
