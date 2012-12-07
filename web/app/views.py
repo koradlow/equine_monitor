@@ -26,31 +26,36 @@ def index():
 @app.route('/config/', defaults={'horse_id': ''})
 @app.route("/config/<horse_id>")
 def display_config(horse_id):
+	print 'rendering config'
 	return render_template("config.html", title = horse_id, menu = get_main_menu())
 
 @app.route('/data/', defaults={'horse_id': ''})
 @app.route("/data/<horse_id>")
 def display_data(horse_id):
+	print 'rendering data'
 	return render_template("data.html", title = horse_id, menu = get_main_menu() , 
-	sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id, tables = {})
+		sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id, tables = {})
 
 @app.route("/data/<horse_id>/<sensor_id>")
 def display_sensor_data(horse_id, sensor_id):
-	print horse_id
-	print sensor_id
-	table = TABLENAMES[sensor_id] if TABLENAMES.has_key(sensor_id) else ''
-	print table
+	print 'rendering sensor data'
+	table = TABLENAMES[sensor_id] if TABLENAMES.has_key(sensor_id) else None
 	return render_template("data.html", title = horse_id, menu = get_main_menu(),
-	sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id, tables = get_table(table, horse_id))
+		sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id,
+		tables = get_table(table, horse_id))
 
 @app.route('/status')
 def display_status():
+	print 'rendering status'
 	return render_template("status.html", menu = get_main_menu())
 
 @app.route('/debug/', defaults={'horse_id': ''})
 @app.route("/debug/<horse_id>")
-def display_data(horse_id):
-	return render_template("debug.html", title = horse_id, menu = get_main_menu(), horse_id = horse_id, tables = {})
+def display_debug(horse_id):
+	print 'rendering debug data'
+	table = TABLENAMES['debug']
+	return render_template("debug.html", title = horse_id, menu = get_main_menu(),
+		horse_id = horse_id, tables = get_table(table, horse_id))
 
 # Helper functions
 
@@ -70,7 +75,7 @@ def get_main_menu():
 	menu = [ {'href' : '/data', 'caption' : 'Data', 'submenu' : get_node_list('/data/')},
 		{'href' : '/config', 'caption' : 'Config', 'submenu' : get_node_list('/config/')},
 		{'href' : '/status', 'caption' : 'Status' },
-		{'href' : '/debug', 'caption' : 'Debug', 'submenu' : get_node_list('/data/')}
+		{'href' : '/debug', 'caption' : 'Debug', 'submenu' : get_node_list('/debug/')}
 		]
 	return menu
 
@@ -87,15 +92,16 @@ def get_sensor_menu(horse_id):
 # returns the items of the table where the addr64(horse_id) == table.row.addr64 
 def get_table(tablename, horse_id=None):
 	table = []
-	if(horse_id):
+	if(horse_id and tablename):
 		address = get_addr64(horse_id)
 		heart_table = query_db('SELECT * FROM ' + tablename + ' WHERE addr64=' + address + ' LIMIT ' + TABLE_LENGTH)
 		if (heart_table):
 			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
-	else:
+	elif(tablename):
 		heart_table = query_db('SELECT * FROM ' + tablename + ' LIMIT ' + TABLE_LENGTH)
 		if (heart_table):
 			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
+
 	return table
 
 def replace_timestamp(table):

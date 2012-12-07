@@ -20,6 +20,7 @@
 #include "xbee_if.h"
 #include "ini.h"
 #include "messagetypes.h"
+#include "messagestorage.h"
 #include "sqlite_helper.h"
 #include <gbee.h>
 #include <gbee-util.h>
@@ -48,15 +49,15 @@ int main(int argc, char** argv){
 	controller_parse_cl(argc, argv, &settings);
 
 	///* setup XBee interface with settings from config file */
-	//XBee_Config config(settings.tty_port, settings.identifier, settings.controller_mode,
-			//settings.pan_id, settings.timeout, settings.baud_rate, settings.max_unicast_hops);
-	//XBee interface(config);
-	//if (interface.xbee_init() != GBEE_NO_ERROR) {
-		//printf("Error: unable to configure XBee device");
-		//return -1;
-	//}
-	//while (interface.xbee_status());
-	//printf("Successfully formed or joined ZigBee Network\n");
+	XBee_Config config(settings.tty_port, settings.identifier, settings.controller_mode,
+			settings.pan_id, settings.timeout, settings.baud_rate, settings.max_unicast_hops);
+	XBee interface(config);
+	if (interface.xbee_init() != GBEE_NO_ERROR) {
+		printf("Error: unable to configure XBee device");
+		return -1;
+	}
+	while (interface.xbee_status());
+	printf("Successfully formed or joined ZigBee Network\n");
 
 	/* connect to the database, and set it up */
 	int error_code;
@@ -75,14 +76,14 @@ int main(int argc, char** argv){
 	while (1) {
 		XBee_Message *msg = NULL;
 		/* try to decode a message if there's data in the receive buffer */
-		//if (interface.xbee_bytes_available()) {
-			//msg = interface.xbee_receive_message();
-			///* if a message was decoded, store it in the database */
-			//if (msg->is_complete()) {
-				//database.store_msg(db, msg);
-			//}
-			//delete msg;
-		//}
+		if (interface.xbee_bytes_available()) {
+			msg = interface.xbee_receive_message();
+			/* if a message was decoded, store it in the database */
+			if (msg->is_complete()) {
+				database.store_msg(db, msg);
+			}
+			delete msg;
+		}
 		
 		// TODO: figure out if the configuration of one of the nodes
 		// was changed, and update it accordingly
@@ -258,11 +259,12 @@ void insert_into_table(sqlite3 *db, const string &table, const string &values) {
 void Message_Storage::store_msg(sqlite3 *db, XBee_Message *msg) {
 	uint16_t length;
 	uint8_t *data;
-	
+	MessagePacket *message_packet;
+
 	/* de-serialze the message */
 	data = msg->get_payload(&length);
-	MessagePacket *message_packet = (MessagePacket *) new uint8_t[length+10];
-	deserialize(data, message_packet);
+	message_packet = (MessagePacket *) new uint8_t[length+10];
+	MessageStorage::deserialize(data, message_packet);
 	
 	/* store messages into the appropriate db tables */
 	switch (message_packet->mainType) {
@@ -290,14 +292,20 @@ void Message_Storage::store_msg(sqlite3 *db, XBee_Message *msg) {
 /* checks the type of sensor messages and passes them on the the correct store function */
 void Message_Storage::store_sensor_msg(sqlite3 *db, XBee_Message *msg) {
 	uint16_t length;
+	uint8_t *data;
 	MessagePacket *message_packet;
 	SensorMessage *sensor_msg;
 	DeviceType type;
+	uint64_t addr64;
 
-	message_packet = (MessagePacket *)msg->get_payload(&length);
+	/* de-serialze the message */
+	data = msg->get_payload(&length);
+	message_packet = (MessagePacket *) new uint8_t[length+10];
+	MessageStorage::deserialize(data, message_packet);
 	sensor_msg = (SensorMessage*) message_packet->payload;
 	type = sensor_msg->sensorType;
-	uint64_t addr64 = msg->get_address().get_addr64();
+	addr64 = msg->get_address().get_addr64();
+
 	/* the monitoring devices work with a relative timestamp, because
 	 * it cannot be guaranteed that they are synced with a proper RTC.
 	 * Calculate the absolute timestamp of the endTimestampS value and
@@ -322,6 +330,8 @@ void Message_Storage::store_sensor_msg(sqlite3 *db, XBee_Message *msg) {
 		break;
 	default:;
 	}
+
+	delete [] message_packet;
 }
 
 /* decodes messages containing configuration data */
@@ -332,12 +342,17 @@ void Message_Storage::store_config_msg(sqlite3 *db, XBee_Message *msg) {
 /* decodes messages containing debug strings */
 void Message_Storage::store_debug_msg(sqlite3 *db, XBee_Message *msg) {
 	uint16_t length;
+	uint8_t *data;
 	MessagePacket *message_packet;
 	DebugMessage *debug_msg;
+	uint64_t addr64;
 
-	message_packet = (MessagePacket *)msg->get_payload(&length);
+	/* de-serialze the message */
+	data = msg->get_payload(&length);
+	message_packet = (MessagePacket *) new uint8_t[length+10];
+	MessageStorage::deserialize(data, message_packet);
 	debug_msg = (DebugMessage*) message_packet->payload;
-	uint64_t addr64 = msg->get_address().get_addr64();
+	addr64 = msg->get_address().get_addr64();
 	
 	/* the monitoring devices transmit a relative timestamp.
 	 * Calculate the absolute timestamp of the debug message before
@@ -353,6 +368,8 @@ void Message_Storage::store_debug_msg(sqlite3 *db, XBee_Message *msg) {
 		<< ")";
 	insert_into_table(db, TABLE_DEBUG_MESSAGES, command_data.str());
 	printf("%s \n", command_data.str().c_str());
+	
+	delete [] message_packet;
 }
 
 /* tries to store the source address of the message in the db */
@@ -361,7 +378,7 @@ void Message_Storage::store_address(sqlite3 *db, const XBee_Address &addr) {
 	command_data << "("
 		<< addr.get_addr64() << ", "
 		<< addr.addr16 << ", "
-		<< "TBI" 
+		<< "Undefined" 
 		<< ")";
 	insert_into_table(db, TABLE_MONITORING_NODES, command_data.str());
 }
