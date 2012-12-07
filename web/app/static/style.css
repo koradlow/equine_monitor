@@ -94,9 +94,9 @@ header {
 	margin-top:15px;
 	padding: 0px 10px;
 	width: 100%;
-	height: 90px;
+	height: 95px;
 	background-color: rgba(255,255,255,0.4);
-	border-radius: 20px;
+	border-radius: 10px;
 	margin-bottom: 20px;
 }
 
@@ -111,7 +111,7 @@ content {
 	width: 100%;
 	background-color: rgba(255,255,255,0.4);
 	padding: 0px 10px;
-	border-radius: 20px;
+	border-radius: 10px;
 	margin-bottom: 7px;
 	height:100%;
 	min-height: 100%;
@@ -162,8 +162,8 @@ footer {
 
 /* Define the look of tables */
 table.tabelle {
-	margin-left: auto;
-	margin-right: auto;
+	margin: 10px auto;
+	margin-bottom: 20px;
 	border: 1px solid #000;
 	text-align: left;  
 	min-height: 100%}
@@ -202,7 +202,30 @@ table.tabelle td,th {
 .navigation li a:hover {
 	color: #CC3333;
 	}
-	
+/* Begin navigation bar drop-down menu styling */
+.navigation li ul {
+	list-style: none;
+	display: none; 
+	width: 10em; /* Width to help Opera out */
+	}
+.navigation li:hover ul {
+	display: inline;
+	position: absolute;
+	left: 40px;
+	width: 100%;
+	mergin-top: 10px;
+	margin-left: 0px;
+	padding: 0;
+	font-size: 16px;}
+.navigation li:hover li {
+	float: left;
+	margin: 0,0,0, 100px; 
+	}
+.navigation li:hover li a {
+	font-size: 16px;
+	color: #999; }
+.navigation li li a:hover {
+	color: #CC3333;}
 /* Inherit from navigation to define Main Menu & Sensor Menu */
 .navigation_sensor {
 	top: 10px;
@@ -214,33 +237,6 @@ table.tabelle td,th {
 	text-decoration: none;
 	font-size: 18px;
 }
-
-/* Begin navigation bar drop-down menu styling */
-.navigation li ul {
-	list-style: none;
-	display: none; 
-	width: 10em; /* Width to help Opera out */
-	margin-bottom:100px;
-	}
-.navigation li:hover ul {
-	display: inline;
-	position: absolute;
-	left: 0;
-	width: 100%;
-	mergin-top: 10px;
-	margin-left: 0px;
-	padding: 0;
-	font-size:0.8em}
-.navigation li:hover li {
-	float: left;
-	margin: 0,0,0, 100px; 
-	}
-.navigation li:hover li a {
-	font-size: 16px;
-	color: #999; }
-.navigation li li a:hover {
-	color: #CC3333;}
-	
 /* End navigation bar styling. */
 
 
