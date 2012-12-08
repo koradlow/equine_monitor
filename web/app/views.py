@@ -92,13 +92,19 @@ def get_sensor_menu(horse_id):
 # returns the items of the table where the addr64(horse_id) == table.row.addr64 
 def get_table(tablename, horse_id=None):
 	table = []
+	sort_column = 'timestamp';
 	if(horse_id and tablename):
 		address = get_addr64(horse_id)
-		heart_table = query_db('SELECT * FROM ' + tablename + ' WHERE addr64=' + address + ' LIMIT ' + TABLE_LENGTH)
+		heart_table = query_db('SELECT * FROM ' + tablename +
+		' WHERE addr64=' + address + 
+		' ORDER BY ' + sort_column + ' DESC ' +
+		' LIMIT ' + TABLE_LENGTH)
 		if (heart_table):
 			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
 	elif(tablename):
-		heart_table = query_db('SELECT * FROM ' + tablename + ' LIMIT ' + TABLE_LENGTH)
+		heart_table = query_db('SELECT * FROM ' + tablename +
+		' ORDER BY ' + sort_column + ' DESC ' +
+		' LIMIT ' + TABLE_LENGTH)
 		if (heart_table):
 			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
 
