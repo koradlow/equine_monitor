@@ -20,6 +20,11 @@
 
 <!-- Table contents -->
 <section class="holder_content">
+<!-- display a static google map if gps sensor data was reqested-->
+{% if google_gps_url %}
+<img src={{google_gps_url}} class="center">
+{% endif %}
+
 {% for table in tables %}
 <h3>Data for {{table[0]}} of {{horse_id}}</h3>
 <table class="tabelle" id="scrollTabelle" cellpadding="0" cellspacing="0">

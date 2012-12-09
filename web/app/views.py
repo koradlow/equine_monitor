@@ -39,10 +39,12 @@ def display_data(horse_id):
 @app.route("/data/<horse_id>/<sensor_id>")
 def display_sensor_data(horse_id, sensor_id):
 	print 'rendering sensor data'
+	gps_url = get_google_gps_url(horse_id) if sensor_id == 'gps' else None
+	print gps_url
 	table = TABLENAMES[sensor_id] if TABLENAMES.has_key(sensor_id) else None
 	return render_template("data.html", title = horse_id, menu = get_main_menu(),
 		sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id,
-		tables = get_table(table, horse_id))
+		tables = get_table(table, horse_id, ), google_gps_url = gps_url)
 
 @app.route('/status')
 def display_status():
@@ -95,18 +97,18 @@ def get_table(tablename, horse_id=None):
 	sort_column = 'timestamp';
 	if(horse_id and tablename):
 		address = get_addr64(horse_id)
-		heart_table = query_db('SELECT * FROM ' + tablename +
+		sql_table = query_db('SELECT * FROM ' + tablename +
 		' WHERE addr64=' + address + 
 		' ORDER BY ' + sort_column + ' DESC ' +
 		' LIMIT ' + TABLE_LENGTH)
-		if (heart_table):
-			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
+		if (sql_table):
+			table.append([tablename, sql_table[0].keys(), replace_timestamp(sql_table)])
 	elif(tablename):
-		heart_table = query_db('SELECT * FROM ' + tablename +
+		sql_table = query_db('SELECT * FROM ' + tablename +
 		' ORDER BY ' + sort_column + ' DESC ' +
 		' LIMIT ' + TABLE_LENGTH)
-		if (heart_table):
-			table.append([tablename, heart_table[0].keys(), replace_timestamp(heart_table)])
+		if (sql_table):
+			table.append([tablename, sql_table[0].keys(), replace_timestamp(sql_table)])
 
 	return table
 
@@ -114,6 +116,53 @@ def replace_timestamp(table):
 	for row in table:
 		row['timestamp'] = time.ctime(int(row['timestamp']))
 	return table
+
+# creates a url to request a static google maps image, which contains
+# markers for the last n positions of the horse with horse_id
+# horse_id [in]: horse string identifier
+# returns: url string for static google map
+def get_google_gps_url(horse_id):
+	url = 'http://maps.googleapis.com/maps/api/staticmap?'
+	param_api_key = '&key=AIzaSyChRlb6i03owYxjupbPTn35ifbmCoKrlZo'
+	param_size = '&size=900x600'
+	param_maptype = '&maptype=hybrid'
+	param_pos = 'center=50.9397,-1.40666'
+	param_zoom = '&zoom=18'
+	param_sensor = '&sensor=true'
+	gps_markers = get_google_gps_markers(get_gps_locations(horse_id, 10))
+	url = url + param_size + param_zoom + param_maptype + param_sensor +param_api_key + gps_markers
+	return url
+
+# creates a list of the last count gps positions of the horse, and delivers
+# each position in a dictionary with the keys 'longitude' and 'latitude'
+# hose_id [in]: horse string identifier
+# count [in]: length of returned list
+# returns: list of dictionaries
+def get_gps_locations(horse_id, count):
+	table = get_table(TABLENAMES['gps'], horse_id)
+	markers = []
+	for row in table[0][2]:
+		print row
+		longitude = row['long_h'] + row['long_min']/60.0 + row['long_s']/3600.0
+		longitude = longitude if not row['long_west'] else (longitude* -1)
+		latitude = row['lat_h'] + row['lat_min']/60.0 + row['lat_s']/3600.0
+		latitude = latitude if row['lat_north'] else (latitude* -1)
+		markers.append({'longitude' : longitude, 'latitude' : latitude})
+		print longitude
+		print latitude
+	return markers[0:count]
+
+# creates a google maps url compatible string that contains markers to all
+# gps positions defined in the input parameter
+# gps_locations: expects list of dictionaries with the keys 'longitude' and 'latitude'
+# returns: url substring to append to url for static google map request
+def get_google_gps_markers(gps_locations):
+	markers = '&markers='
+	markers_styles = 'size:small'
+	markers += markers_styles
+	for pos in gps_locations:
+		markers += '|' + str(pos['latitude']) + ',' + str(pos['longitude'])
+	return markers
 
 # TODO: Implement setting of Node identifier for horse from web interface
 def get_addr64(horse_id):
