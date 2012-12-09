@@ -13,6 +13,7 @@ TABLENAMES = { 'heart': 'sensorHeart',
 		'temp' : 'sensorTemperature',
 		'accel' : 'sensorAccelerometer',
 		'gps' : 'sensorGPS',
+		'gps_alt' : 'sensorGPSAlt',
 		'debug' : 'debugMessages',
 		'nodes' : 'monitoringNodes' }
 TABLE_LENGTH = '50'
@@ -39,12 +40,12 @@ def display_data(horse_id):
 @app.route("/data/<horse_id>/<sensor_id>")
 def display_sensor_data(horse_id, sensor_id):
 	print 'rendering sensor data'
-	gps_url = get_google_gps_url(horse_id) if sensor_id == 'gps' else None
+	gps_url = get_google_gps_url(horse_id) if sensor_id == 'gps_alt' else None
 	print gps_url
 	table = TABLENAMES[sensor_id] if TABLENAMES.has_key(sensor_id) else None
 	return render_template("data.html", title = horse_id, menu = get_main_menu(),
 		sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id,
-		tables = get_table(table, horse_id, ), google_gps_url = gps_url)
+		tables = get_table(table, horse_id), google_gps_url = gps_url)
 
 @app.route('/status')
 def display_status():
@@ -74,10 +75,10 @@ def get_node_list(basepath):
 # returns the items of the main menu in a list of dictionaries with the
 # keys 'href', 'caption' and 'submenu' (list of dictionaries with same keys)
 def get_main_menu():
-	menu = [ {'href' : '/data', 'caption' : 'Data', 'submenu' : get_node_list('/data/')},
-		{'href' : '/config', 'caption' : 'Config', 'submenu' : get_node_list('/config/')},
+	menu = [ {'href' : '#', 'caption' : 'Data', 'submenu' : get_node_list('/data/')},
+		{'href' : '#', 'caption' : 'Config', 'submenu' : get_node_list('/config/')},
 		{'href' : '/status', 'caption' : 'Status' },
-		{'href' : '/debug', 'caption' : 'Debug', 'submenu' : get_node_list('/debug/')}
+		{'href' : '#', 'caption' : 'Debug', 'submenu' : get_node_list('/debug/')}
 		]
 	return menu
 
@@ -87,7 +88,7 @@ def get_sensor_menu(horse_id):
 	sensor_menu = 	 [ {'href' : '/data/'+horse_id+'/heart', 'caption' : 'Heart'},
 		{'href' : '/data/'+horse_id+'/temp', 'caption' : 'Temperature'},
 		{'href' : '/data/'+horse_id+'/accel', 'caption' : 'Accelerometer'},
-		{'href' : '/data/'+horse_id+'/gps', 'caption' : 'GPS'}
+		{'href' : '/data/'+horse_id+'/gps_alt', 'caption' : 'GPS'}
 		]
 	return sensor_menu
 
@@ -142,7 +143,6 @@ def get_gps_locations(horse_id, count):
 	table = get_table(TABLENAMES['gps'], horse_id)
 	markers = []
 	for row in table[0][2]:
-		print row
 		longitude = row['long_h'] + row['long_min']/60.0 + row['long_s']/3600.0
 		longitude = longitude if not row['long_west'] else (longitude* -1)
 		latitude = row['lat_h'] + row['lat_min']/60.0 + row['lat_s']/3600.0

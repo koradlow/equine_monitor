@@ -48,7 +48,7 @@ int main(int argc, char** argv){
 	Settings settings;
 	controller_parse_cl(argc, argv, &settings);
 
-	///* setup XBee interface with settings from config file */
+	/* setup XBee interface with settings from config file */
 	XBee_Config config(settings.tty_port, settings.identifier, settings.controller_mode,
 			settings.pan_id, settings.timeout, settings.baud_rate, settings.max_unicast_hops);
 	XBee interface(config);
