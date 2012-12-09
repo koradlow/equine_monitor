@@ -24,6 +24,7 @@
 #define TABLE_SENSOR_TEMP "sensorTemperature"
 #define TABLE_SENSOR_ACCEL "sensorAccelerometer"
 #define TABLE_SENSOR_GPS "sensorGPS"
+#define TABLE_SENSOR_GPS_ALT "sensorGPSAlt"
 #define TABLE_DEBUG_MESSAGES "debugMessages"
 #define TABLE_MONITORING_NODES "monitoringNodes"
 
@@ -65,6 +66,7 @@ private:
 	void store_sensor_raw_temperature(sqlite3 *db, SensorMessage *sensor_msg, uint64_t addr64);
 	void store_sensor_accelerometer(sqlite3 *db, SensorMessage *sensor_msg, uint64_t addr64);
 	void store_sensor_gps(sqlite3 *db, SensorMessage *sensor_msg, uint64_t addr64);
+	void store_sensor_gps_alt(sqlite3 *db, SensorMessage *sensor_msg, uint64_t addr64);
 };
 
 /* function will try to insert a new row of data into the table */ 

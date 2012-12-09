@@ -45,7 +45,7 @@ int main(int argc, char** argv){
 	signal(SIGINT, signal_handler_interrupt);
 	
 	/* try to load the settings from the config file */
-	struct Settings settings;
+	Settings settings;
 	controller_parse_cl(argc, argv, &settings);
 
 	///* setup XBee interface with settings from config file */
@@ -100,7 +100,7 @@ void controller_usage_hint() {
 
 int controller_ini_cb(void* buffer, const char* section, const char* name, const char* value) {
 	#define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
-	struct Settings *settings = (struct Settings*) buffer;
+	Settings *settings = (Settings*) buffer;
 
 	/* Controller Settings */
 	if (MATCH("CONTROLLER", "database")) {
@@ -129,7 +129,7 @@ int controller_ini_cb(void* buffer, const char* section, const char* name, const
 	return 0;
 }
 
-void controller_parse_pan(struct Settings *settings, const char *value)
+void controller_parse_pan(Settings *settings, const char *value)
 {
 	const uint8_t PAN_SIZE = 8;
 	char pan_tmp[PAN_SIZE];
@@ -162,7 +162,7 @@ void controller_parse_pan(struct Settings *settings, const char *value)
 	printf("size: %u\n", size);
 }
 
-void controller_parse_cl(int argc,char **argv, struct Settings *settings) {
+void controller_parse_cl(int argc,char **argv, Settings *settings) {
 	if (argc == 1) {
 		controller_usage_hint();
 		exit(1);
@@ -200,6 +200,7 @@ void create_db_tables(sqlite3 *db) {
 	string table_temperature = create + TABLE_SENSOR_TEMP + common_sensor_columns;
 	string table_accel = create + TABLE_SENSOR_ACCEL + common_sensor_columns;
 	string table_gps = create + TABLE_SENSOR_GPS + common_sensor_columns;
+	string table_gps_alt = create + TABLE_SENSOR_GPS_ALT + common_sensor_columns;
 	string table_debug = create + TABLE_DEBUG_MESSAGES + common_debug_columns;
 	string table_nodes = create + TABLE_MONITORING_NODES + common_node_columns;
 	
@@ -218,6 +219,8 @@ void create_db_tables(sqlite3 *db) {
 			"long_s INT, "
 			"long_west BOOL, "
 			"valid_pos_fix BOOL)";
+	table_gps_alt +="latitude REAL, "
+			"longitude REAL)";
 	table_debug +=	"message TEXT)";
 
 	// TODO: Remove debug print statements
@@ -225,6 +228,7 @@ void create_db_tables(sqlite3 *db) {
 	printf("%s \n", table_temperature.c_str());
 	printf("%s \n", table_accel.c_str());
 	printf("%s \n", table_gps.c_str());
+	printf("%s \n", table_gps_alt.c_str());
 	printf("%s \n", table_debug.c_str());
 	printf("%s \n", table_nodes.c_str());
 	
@@ -233,6 +237,7 @@ void create_db_tables(sqlite3 *db) {
 	CALL_SQLITE(exec(db, table_temperature.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_accel.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_gps.c_str(), 0, 0, 0));
+	CALL_SQLITE(exec(db, table_gps_alt.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_debug.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_nodes.c_str(), 0, 0, 0));
 }
@@ -327,6 +332,7 @@ void Message_Storage::store_sensor_msg(sqlite3 *db, XBee_Message *msg) {
 		break;
 	case typeGPS:
 		store_sensor_gps(db, sensor_msg, addr64);
+		store_sensor_gps_alt(db, sensor_msg, addr64);
 		break;
 	default:;
 	}
@@ -448,17 +454,52 @@ void Message_Storage::store_sensor_gps(sqlite3 *db,
 			<< (-i * sensor_msg->sampleIntervalMs) << ", " 
 			<< (int)msg_array[i].latitude.degree << ", "
 			<< (int)msg_array[i].latitude.minute << ", "
-			<< (int)msg_array[i].latitude.minute << ", "
+			<< (int)msg_array[i].latitude.second << ", "
 			<< (int)msg_array[i].latitudeNorth << ", "
 			<< (int)msg_array[i].longitude.degree << ", "
 			<< (int)msg_array[i].longitude.minute << ", "
-			<< (int)msg_array[i].longitude.minute << ", "
+			<< (int)msg_array[i].longitude.second << ", "
 			<< (int)msg_array[i].longitudeWest << ", "
-			<< (int)msg_array[i].validPosFix << ", "
+			<< (int)msg_array[i].validPosFix
 			<< ")";
 		insert_into_table(db, TABLE_SENSOR_GPS, command_data.str());
 		printf("%s \n", command_data.str().c_str());
 	}
+}
+
+/* calculates the latitude and longitude values before storing the data into the db */
+void Message_Storage::store_sensor_gps_alt(sqlite3 *db, 
+		SensorMessage *sensor_msg, uint64_t addr64) {
+	GPSMessage *msg_array = (GPSMessage *)sensor_msg->sensorMsgArray;
+	
+	for (uint8_t i = 0; i < sensor_msg->arrayLength; i++) {
+		stringstream command_data;
+		GPSPosition position = calculate_gps_position(&msg_array[i]);
+		command_data << "(" 
+			<< addr64 << ", " 
+			<< sensor_msg->endTimestampS << ", "
+			<< (-i * sensor_msg->sampleIntervalMs) << ", " 
+			<< position.latitude << ", "
+			<< position.longitude
+			<< ")";
+		insert_into_table(db, TABLE_SENSOR_GPS_ALT, command_data.str());
+		printf("%s \n", command_data.str().c_str());
+	}
+}
+
+GPSPosition calculate_gps_position(const GPSMessage* gps) {
+	GPSPosition position;
+	/* calculate latitude */
+	position.latitude = gps->latitude.degree +  gps->latitude.minute / 60.0 +
+			 gps->latitude.second / 3600.0;
+	position.latitude = (gps->latitudeNorth)? position.latitude : -(position.latitude);
+
+	/* calculte longitude */
+	position.longitude = gps->longitude.degree +  gps->longitude.minute / 60.0 +
+			 gps->longitude.second / 3600.0;
+	position.longitude = (gps->longitudeWest)? -position.longitude : (position.longitude);
+
+	return position;
 }
 
 double calculate_temperature(double v_obj, double t_env)

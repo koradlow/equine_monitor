@@ -79,6 +79,11 @@ h4 {
 	padding-top: 3px;
 }
 
+img.center {
+	display:block;
+	margin: 0px auto;
+}
+
 /* Define the look of the main containers */
 #Container {
 	position: relative;
