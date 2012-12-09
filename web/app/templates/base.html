@@ -11,9 +11,9 @@
 	</head>
 	<body>
 		<div id="Container">
-		<header>
+		<section id="Header">
 		<!--start logo-->
-		<h1><a href="/">EquineHealthMonitor</a></h1>
+		<h1><a href="/" class="logo">EquineHealthMonitor</a></h1>
 		<!--end logo-->
 		<ul class="navigation">
 			{% for item in menu %}
@@ -29,10 +29,10 @@
 			{% endfor %}
 		</ul> 
 		<!-- end navigation-->
-		</header>
-		<content>
+		</section>
+		<section id="Content">
 		{% block content %} {% endblock %}
-		</content>
+		</section>
 		<!--end content-->
 		</div>
 		<!--end container-->

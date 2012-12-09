@@ -12,7 +12,7 @@ body {
 	margin: 0 0 1px;
 	line-height: 1.7;
 	border-top: 10px solid black;
-	background-image:  url(images/bg_dark.png); 
+	background-image:  url(images/bg_wood.png); 
 	background-position: left top;
 	background-repeat: repeat;
 }
@@ -87,41 +87,57 @@ img.center {
 /* Define the look of the main containers */
 #Container {
 	position: relative;
-	background-color: transpartent;
+	background-color: transparent;
 	width: 980px;
 	margin: 0 auto;
 	min-height: 93%;
 }
 
-header {
+#Header {
 	position: relative;
-	float: left;
-	margin-top:15px;
-	padding: 0px 10px;
-	width: 100%;
+	width: auto;
 	height: 95px;
-	background-color: rgba(255,255,255,0.4);
+	background-color: rgba(255,255,255,0.6);
+	margin-top:15px;
+	padding: 1px 20px;
 	border-radius: 10px;
 	margin-bottom: 20px;
 }
-
-header a {
+#Header a.logo{
 	text-decoration:none;
+	float: left;
 	color: #CC3333;
 }
 
-content {
+#Submenu {
 	position: relative;
-	float: left;
 	width: 100%;
-	background-color: rgba(255,255,255,0.4);
-	padding: 0px 10px;
+	height: 60px;
+}
+
+#Content {
+	position: relative;
+	width: auto;
+	background-color: rgba(255,255,255,0.6);
 	border-radius: 10px;
 	margin-bottom: 7px;
 	height:100%;
+	padding: 10px 20px;
 	min-height: 100%;
 }
 
+#Intro {
+	position: relative;
+	width: 100%;
+	margin:10px 0px;
+}
+
+#Data {
+	position: relative;
+	width: 100%;
+	margin:0px 0px;
+	padding-bottom: 20px;
+}
 .holder_content {
 	position: relative;
 	float: left;
@@ -148,52 +164,39 @@ footer {
 	color: white;
 }
 
-#Submenu {
-	position: relative;
-	float: left;
-	width: 100%;
-	height: 40px;
-	background: transparent;
-}
-
-#Intro {
-	position: relative;
-	float: left;
-	width: 100%;
-	margin:10px 0px;
-	height: auto;
-	background: transparent;
-}
-
 /* Define the look of tables */
 table.tabelle {
 	margin: 10px auto;
 	margin-bottom: 20px;
 	border: 1px solid #000;
 	text-align: left;  
-	min-height: 100%}
+	min-height: 100%;
+	}
 table.tabelle th {
 	font-weight: bold;
 	background-color: rgba(100,100,100,0.4);
-	border-bottom: 1px solid #000; }
+	border-bottom: 1px solid #000;
+	}
 table.tabelle td,th {
-	padding: 4px 15px; }
+	padding: 4px 15px;
+	}
 
 
 /* Begin Navigation Bar Styling */
 .navigation {
 	position: absolute;
-	width: 420px;
+	width: 480px;
 	top: 15px;
-	left: 520px;
+	right: 20px;
 	float: left;			/* make it horizontal */
 	list-style: none;		/* remove bullet points */
 	border-top: 1px solid #A3A3A3;
-	border-bottom: 1px solid #A3A3A3
+	border-bottom: 1px solid #A3A3A3; 
 	}
 .navigation li {
 	float: left;
-	line-height: normal;}
+	line-height: normal;
+	}
 .navigation li a {
 	display: block;			/* make whole button clickable */
 	padding: 6px 15px;
@@ -207,36 +210,39 @@ table.tabelle td,th {
 .navigation li a:hover {
 	color: #CC3333;
 	}
+
 /* Begin navigation bar drop-down menu styling */
 .navigation li ul {
 	list-style: none;
 	display: none; 
 	width: 10em; /* Width to help Opera out */
+	padding: 0;
 	}
+
 .navigation li:hover ul {
 	display: inline;
-	position: absolute;
-	left: 40px;
-	width: 100%;
+	width: auto%;
 	mergin-top: 10px;
 	margin-left: 0px;
-	padding: 0;
-	font-size: 16px;}
+	font-size: 16px;
+	}
 .navigation li:hover li {
-	float: left;
-	margin: 0,0,0, 100px; 
 	}
 .navigation li:hover li a {
 	font-size: 16px;
-	color: #999; }
+	color: #999;
+	}
 .navigation li li a:hover {
-	color: #CC3333;}
+	color: #CC3333;
+	}
+
 /* Inherit from navigation to define Main Menu & Sensor Menu */
 .navigation_sensor {
-	top: 10px;
-	left: 380px;
+	position: absolute;
+	top: 0px;
+	right: 0px;
 	width: 560px;
-}
+	}
 
 .navigation_sensor li a {
 	text-decoration: none;

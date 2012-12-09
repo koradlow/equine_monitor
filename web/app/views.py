@@ -75,7 +75,7 @@ def get_node_list(basepath):
 # returns the items of the main menu in a list of dictionaries with the
 # keys 'href', 'caption' and 'submenu' (list of dictionaries with same keys)
 def get_main_menu():
-	menu = [ {'href' : '#', 'caption' : 'Data', 'submenu' : get_node_list('/data/')},
+	menu = [ {'href' : '#', 'caption' : 'Sensors', 'submenu' : get_node_list('/data/')},
 		{'href' : '#', 'caption' : 'Config', 'submenu' : get_node_list('/config/')},
 		{'href' : '/status', 'caption' : 'Status' },
 		{'href' : '#', 'caption' : 'Debug', 'submenu' : get_node_list('/debug/')}
