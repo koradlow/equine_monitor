@@ -18,7 +18,9 @@ body {
 }
 
 p {
-	margin-top: 3px;
+	text-align:justify;
+	text-justify:inter-word;
+	font-size: 14px;
 }
 a, p a {
 	text-decoration: underline;
@@ -104,7 +106,9 @@ img.center {
 	margin-bottom: 20px;
 }
 #Header a.logo{
+	font-family:Impact, Charcoal, sans-serif;
 	text-decoration:none;
+	text-shadow: 0px 2px 1px #666666;
 	float: left;
 	color: #CC3333;
 }

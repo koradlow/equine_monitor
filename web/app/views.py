@@ -77,8 +77,8 @@ def get_node_list(basepath):
 def get_main_menu():
 	menu = [ {'href' : '#', 'caption' : 'Sensors', 'submenu' : get_node_list('/data/')},
 		{'href' : '#', 'caption' : 'Config', 'submenu' : get_node_list('/config/')},
-		{'href' : '/status', 'caption' : 'Status' },
-		{'href' : '#', 'caption' : 'Debug', 'submenu' : get_node_list('/debug/')}
+		{'href' : '#', 'caption' : 'Debug', 'submenu' : get_node_list('/debug/')},
+		{'href' : '/status', 'caption' : 'Status' }
 		]
 	return menu
 
