@@ -63,6 +63,6 @@ int controller_ini_cb(void* buffer, const char* section, const char* name, const
 GPSPosition calculate_gps_position(const GPSMessage* gps);
 
 /* calculate the actual temperature from the raw sensor readings */
-double calculate_temperature(double v_obj, double t_env);
+double calculate_temperature(double tDieUF, double vObjUF);
 
  #endif 

@@ -370,7 +370,7 @@ void Message_Storage::store_debug_msg(sqlite3 *db, XBee_Message *msg) {
 	command_data << "("
 		<< addr64 <<", "
 		<< timestampS << ", "
-		<< debug_string
+		<< "'" << debug_string << "'"
 		<< ")";
 	insert_into_table(db, TABLE_DEBUG_MESSAGES, command_data.str());
 	printf("%s \n", command_data.str().c_str());
@@ -381,11 +381,13 @@ void Message_Storage::store_debug_msg(sqlite3 *db, XBee_Message *msg) {
 /* tries to store the source address of the message in the db */
 void Message_Storage::store_address(sqlite3 *db, const XBee_Address &addr) {
 	stringstream command_data;
+	
 	command_data << "("
 		<< addr.get_addr64() << ", "
 		<< addr.addr16 << ", "
-		<< "Undefined" 
+		<< "'Undefined'" 
 		<< ")";
+	printf("%s \n", command_data.str().c_str());
 	insert_into_table(db, TABLE_MONITORING_NODES, command_data.str());
 }
 
@@ -410,7 +412,7 @@ void Message_Storage::store_sensor_raw_temperature(sqlite3 *db,
 	RawTemperatureMessage *msg_array = (RawTemperatureMessage *)sensor_msg->sensorMsgArray;
 
 	for (uint8_t i = 0; i < sensor_msg->arrayLength; i++) {
-		double temp = calculate_temperature(msg_array[i].Vobj, msg_array[i].Tenv);
+		double temp = calculate_temperature((double)msg_array[i].Tenv, (double)msg_array[i].Vobj);
 		stringstream command_data;
 		command_data << "(" 
 			<< addr64 <<", " 
@@ -502,24 +504,29 @@ GPSPosition calculate_gps_position(const GPSMessage* gps) {
 	return position;
 }
 
-double calculate_temperature(double v_obj, double t_env)
+double calculate_temperature(double tDieUF, double vObjUF)
 {
+	double vObj = 0, tDie = 0;
+	tDie= ( (tDieUF / 4)  * .03125) + 273.15;
+	vObj =  vObjUF * .00000015625;
+
 	// Calculate Tobj, based on data/formula from TI
-	double S0 = 0.00000000000006;       /* Default S0 cal value,  6 * pow(10, -14) */
-	double a1 = 0.00175; /* 1.75 * pow(10, -3) */
-	double a2 = -0.00001678; /* -1.678 * pow(10, -5) */
-	double b0 = -0.0000294; /* -2.94 * pow(10, -5) */
-	double b1 = -0.00000057;  /* -5.7*pow(10, -7); */
-	double b2 = 0.00000000463 /* 4.63*pow(10, -9) */;
+	double S0 = 0.00000000000006;       
+	double a1 = 0.00175; 
+	double a2 = -0.00001678; 
+	double b0 = -0.0000294; 
+	double b1 = -0.00000057;  
+	double b2 = 0.00000000463; 
 	double c2 = 13.4;
 	double Tref = 298.15;
-	double S = S0*(1+a1*(t_env - Tref)+a2*pow((t_env - Tref),2));
-	double Vos = b0 + b1*(t_env - Tref) + b2*pow((t_env - Tref),2);
-	double fObj = (v_obj - Vos) + c2*pow((v_obj - Vos),2);
-	double Tobj = pow(pow(t_env,4) + (fObj/S), (double).25) - 273.15;
-
+	double S = S0*(1+a1*(tDie - Tref)+a2*pow((tDie - Tref),2));
+	double Vos = b0 + b1*(tDie - Tref) + b2*pow((tDie - Tref),2);
+	double fObj = (vObj - Vos) + c2*pow((vObj - Vos),2);
+	double Tobj = pow(pow(tDie,4) + (fObj/S), (double).25) - 273.15;
+	
 	return Tobj;
 }
+
 /* a signal handler for the ctrl+c interrupt, in order to end the program
  * gracefully (restoring terminal settings and closing fd) */
 static void signal_handler_interrupt(int signum)

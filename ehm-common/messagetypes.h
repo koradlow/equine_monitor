@@ -95,8 +95,8 @@ typedef PACKEDSTRUCT {
 } AccelerometerMessage;
 
 typedef PACKEDSTRUCT {
-	double Vobj;
-	double Tenv;
+	int Vobj;
+	int Tenv;
 } RawTemperatureMessage;
 
 typedef PACKEDSTRUCT {
