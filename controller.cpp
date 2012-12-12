@@ -40,6 +40,7 @@ static sqlite3 *db;
 
 static void signal_handler_interrupt(int signum);
 
+
 int main(int argc, char** argv){
 	/* register signal handler for interrupt signal, to exit gracefully */
 	signal(SIGINT, signal_handler_interrupt);
@@ -72,6 +73,7 @@ int main(int argc, char** argv){
 	
 	/* system initialization complete - start main control loop */
 	Message_Storage database;
+	
 	printf("Waiting for messages\n");
 	while (1) {
 		XBee_Message *msg = NULL;
@@ -85,8 +87,6 @@ int main(int argc, char** argv){
 			delete msg;
 		}
 		
-		// TODO: figure out if the configuration of one of the nodes
-		// was changed, and update it accordingly
 		usleep(500);
 	}
 
@@ -232,6 +232,12 @@ void create_db_tables(sqlite3 *db) {
 	printf("%s \n", table_debug.c_str());
 	printf("%s \n", table_nodes.c_str());
 	
+	/* create sth */
+	string unique_address_table;
+	unique_address_table = "CREATE UNIQUE INDEX address_ix ON " 
+				+ string(TABLE_MONITORING_NODES)
+				+ " (addr64)";
+				
 	/* try to create the tables */
 	CALL_SQLITE(exec(db, table_heart.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_temperature.c_str(), 0, 0, 0));
@@ -240,6 +246,7 @@ void create_db_tables(sqlite3 *db) {
 	CALL_SQLITE(exec(db, table_gps_alt.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_debug.c_str(), 0, 0, 0));
 	CALL_SQLITE(exec(db, table_nodes.c_str(), 0, 0, 0));
+	CALL_SQLITE(exec(db, unique_address_table.c_str(), 0, 0, 0));
 }
 
 /* inserts one new row of data in the table identified by the table parameter.
@@ -321,7 +328,7 @@ void Message_Storage::store_sensor_msg(sqlite3 *db, XBee_Message *msg) {
 	printf("Sensor Message: %u, %u , %u\n", sensor_msg->endTimestampS, sensor_msg->sampleIntervalMs, sensor_msg->arrayLength);
 	switch (type) {
 	case typeHeartRate:
-		printf("storing hear rate message\n");
+		printf("storing heart rate message\n");
 		store_sensor_heart(db, sensor_msg, addr64);
 		break;
 	case typeRawTemperature:
@@ -380,15 +387,26 @@ void Message_Storage::store_debug_msg(sqlite3 *db, XBee_Message *msg) {
 
 /* tries to store the source address of the message in the db */
 void Message_Storage::store_address(sqlite3 *db, const XBee_Address &addr) {
-	stringstream command_data;
+	stringstream address64;
+	stringstream address16;
+
+	address64 << addr.get_addr64();
+	address16 << addr.addr16;
 	
-	command_data << "("
-		<< addr.get_addr64() << ", "
-		<< addr.addr16 << ", "
-		<< "'Undefined'" 
-		<< ")";
-	printf("%s \n", command_data.str().c_str());
-	insert_into_table(db, TABLE_MONITORING_NODES, command_data.str());
+	/* compile an SQL statement for update/insert of the source address */
+	/* --> the 64bit address is unique and serves as an identifier,
+	 * the 16bit address can change, if a node reconnects. 
+	 * The goal is to update the 16bit address if the 64bit address already exists
+	 * (keeping the string identifier)
+	 * or inserting a new entry if the 64bit address is unknown */
+	string sql_update = "INSERT OR REPLACE INTO "+ string(TABLE_MONITORING_NODES) + 
+	" (addr64, addr16, identifier) VALUES ( " + address64.str() + ", " + address16.str() + 
+	", COALESCE(" 
+	"(SELECT identifier FROM "+ string(TABLE_MONITORING_NODES) + " WHERE addr64=" + address64.str() +")" +
+	", 'Undefined'))";
+
+	/* execute the statement */
+	CALL_SQLITE(exec(db, sql_update.c_str(), NULL, NULL, NULL));
 }
 
 void Message_Storage::store_sensor_heart(sqlite3 *db,
