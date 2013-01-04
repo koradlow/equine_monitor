@@ -142,14 +142,15 @@ def get_google_gps_url(horse_id):
 def get_gps_locations(horse_id, count):
 	table = get_table(TABLENAMES['gps'], horse_id)
 	markers = []
-	for row in table[0][2]:
-		longitude = row['long_h'] + row['long_min']/60.0 + row['long_s']/3600.0
-		longitude = longitude if not row['long_west'] else (longitude* -1)
-		latitude = row['lat_h'] + row['lat_min']/60.0 + row['lat_s']/3600.0
-		latitude = latitude if row['lat_north'] else (latitude* -1)
-		markers.append({'longitude' : longitude, 'latitude' : latitude})
-		print longitude
-		print latitude
+	if table:
+		for row in table[0][2]:
+			longitude = row['long_h'] + row['long_min']/60.0 + row['long_s']/3600.0
+			longitude = longitude if not row['long_west'] else (longitude* -1)
+			latitude = row['lat_h'] + row['lat_min']/60.0 + row['lat_s']/3600.0
+			latitude = latitude if row['lat_north'] else (latitude* -1)
+			markers.append({'longitude' : longitude, 'latitude' : latitude})
+			print longitude
+			print latitude
 	return markers[0:count]
 
 # creates a google maps url compatible string that contains markers to all

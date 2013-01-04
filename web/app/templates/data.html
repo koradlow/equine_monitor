@@ -3,11 +3,13 @@
 {% if horse_id %}
 <!-- Submenu for sensor Types -->
 <section id="Submenu">
-	<ul class="navigation navigation_sensor">
+	<div class="navigation navigation_sensor">
+	<ul>
 		{% for item in sensor_menu %}
 		<li><a href="{{ item.href }}">{{ item.caption }}</a>
 		{% endfor %}
 	</ul>
+	</div>
 </section>
 <section id="Intro">
 	<hgroup>

@@ -15,20 +15,22 @@
 		<!--start logo-->
 		<h1><a href="/" class="logo">EquineHealthMonitor.</a></h1>
 		<!--end logo-->
-		<ul class="navigation">
-			{% for item in menu %}
-			<li><a href="{{ item.href }}">{{ item.caption }}</a>
-			{% if item.submenu %}
-				<ul>
-				{% for sub_item in item.submenu %}
-				<li><a href="{{ sub_item.href }}">{{ sub_item.caption }}</a></li>
+		<div class="navigation">
+			<ul>
+				{% for item in menu %}
+				<li><a href="{{ item.href }}">{{ item.caption }}</a>
+				{% if item.submenu %}
+					<ul>
+					{% for sub_item in item.submenu %}
+					<li><a href="{{ sub_item.href }}">{{ sub_item.caption }}</a></li>
+					{% endfor %}
+					</ul>
+				{% endif %}
+				</li>
 				{% endfor %}
-				</ul>
-			{% endif %}
-			</li>
-			{% endfor %}
-		</ul> 
+			</ul> 
 		<!-- end navigation-->
+		</div>
 		</section>
 		<section id="Content">
 		{% block content %} {% endblock %}

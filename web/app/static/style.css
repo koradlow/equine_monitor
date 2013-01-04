@@ -98,7 +98,7 @@ img.center {
 #Header {
 	position: relative;
 	width: auto;
-	height: 95px;
+	height: 110px;
 	background-color: rgba(255,255,255,0.6);
 	margin-top:15px;
 	padding: 1px 20px;
@@ -188,68 +188,108 @@ table.tabelle td,th {
 
 /* Begin Navigation Bar Styling */
 .navigation {
-	position: absolute;
-	width: 480px;
-	top: 15px;
-	right: 20px;
+	clear: both;
 	float: left;			/* make it horizontal */
+	width: 100%;
+	position: relative;
+	z-index: 1000;
+	top: -25px;
+	/* border-top: 1px solid #A3A3A3; */
+	/* border-bottom: 1px solid #A3A3A3;  */
+	}
+/* Top Menu Items */
+.navigation ul {
+	clear: left;
+	float: right;
 	list-style: none;		/* remove bullet points */
-	border-top: 1px solid #A3A3A3;
-	border-bottom: 1px solid #A3A3A3; 
+	margin: 0;
+	padding: 0;
+	position: relative;
+	right: 50%;
+	text-align: center;
 	}
-.navigation li {
+.navigation ul li {
+	display: block;
 	float: left;
-	line-height: normal;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	position: relative;
+	right: 50%;
+	left: 100%;
 	}
-.navigation li a {
-	display: block;			/* make whole button clickable */
-	padding: 6px 15px;
+.navigation ul li a{
+	float: left;
+	display: block;	/* make whole button clickable */
+	margin: 0 0 0 1px;
+	padding: 3px 10px;
 	text-transform: uppercase;
 	text-decoration: none;
 	text-decoration: bold;
 	font-size: 20px;
 	font-weight: normal;
 	color: #999;
-	}
-.navigation li a:hover {
-	color: #CC3333;
-	}
-
-/* Begin navigation bar drop-down menu styling */
-.navigation li ul {
-	list-style: none;
-	display: none; 
-	width: 10em; /* Width to help Opera out */
-	padding: 0;
-	}
-
-.navigation li:hover ul {
-	display: inline;
-	width: auto%;
-	mergin-top: 10px;
-	margin-left: 0px;
-	font-size: 16px;
-	}
-.navigation li:hover li {
-	}
-.navigation li:hover li a {
-	font-size: 16px;
 	color: #999;
+	line-height: 1.3em;
 	}
-.navigation li li a:hover {
+.navigation ul li a:hover {
 	color: #CC3333;
 	}
+
+/* Sub-Menu Items */
+.navigation ul ul{
+	display:none; /* Sub menus are hiden by default */
+	position:absolute;
+	top:2em;
+	left:5.2em;
+	right:auto; /*resets the right:50% on the parent ul */
+	width:10em; /* width of the drop-down menus */
+	}
+.navigation ul ul li {
+	left:auto;  /*resets the left:50% on the parent li */
+	margin:0; /* Reset the 1px margin from the top menu */
+	clear:left;
+	width:100%;
+	}
+.navigation ul ul li a,
+.navigation ul li.active li a,
+.navigation ul li:hover ul li a,
+.navigation ul li.hover ul li a { /* This line is required for IE 6 and below */
+	font-size:1em;
+	font-weight:normal; /* resets the bold set for the top level menu items */
+	color:#999;
+	line-height:1.4em; /* overwrite line-height value from top menu */
+	}
+.navigation ul ul li a:hover,
+.navigation ul li.active ul li a:hover,
+.navigation ul li:hover ul li a:hover,
+.navigation ul li.hover ul li a:hover { /* This line is required for IE 6 and below */
+	color:#CC3333;
+}
+
+/* Flip the last submenu so it stays within the page */
+.navigation ul ul.last {
+	left:auto; /* reset left:0; value */
+	right:0; /* Set right value instead */
+}
+
+/* Make the sub menus appear on hover */
+.navigation ul li:hover ul,
+.navigation ul li.hover ul { /* This line is required for IE 6 and below */
+	display:block; /* Show the sub menus */
+}
+
 
 /* Inherit from navigation to define Main Menu & Sensor Menu */
 .navigation_sensor {
-	position: absolute;
-	top: 0px;
-	right: 0px;
-	width: 560px;
+	top:.8em;
+	}
+.navigation_sensor ul li{
+	left: 83%;
 	}
 
-.navigation_sensor li a {
-	text-decoration: none;
+.navigation_sensor ul li a {
+	text-decoration: bold;
 	font-size: 18px;
 }
 /* End navigation bar styling. */
