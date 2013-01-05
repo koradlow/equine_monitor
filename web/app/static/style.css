@@ -24,11 +24,11 @@ p {
 }
 a, p a {
 	text-decoration: underline;
-	color: white;
+	color: #999;
 }
 	
 a: hover {
-	color: white;
+	color: #CC3333;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -294,4 +294,15 @@ table.tabelle td,th {
 }
 /* End navigation bar styling. */
 
+
+/* Style for table navigation (next page, prev page, ...)  */
+.navigation_table {
+	text-align:center
+}
+.navigation_table a,
+.navigation table p a {
+	font-size: 2em;
+	text-decoration: none;
+	color: #999;
+}
 

@@ -1,6 +1,7 @@
 import sqlite3
 import time
 import pprint
+from urlparse import urlparse
 from flask import render_template
 from flask import url_for
 from flask import request
@@ -16,7 +17,7 @@ TABLENAMES = { 'heart': 'sensorHeart',
 		'gps_alt' : 'sensorGPSAlt',
 		'debug' : 'debugMessages',
 		'nodes' : 'monitoringNodes' }
-TABLE_LENGTH = '50'
+TABLE_LENGTH = '40'
 
 # Display URL functions
 @app.route("/index")
@@ -41,11 +42,14 @@ def display_data(horse_id):
 def display_sensor_data(horse_id, sensor_id):
 	print 'rendering sensor data'
 	gps_url = get_google_gps_url(horse_id) if sensor_id == 'gps_alt' else None
-	print gps_url
+	# the sensor data table is split into several pages, with equal length
+	# the page argument can be used to select the displayed page
+	page = int(request.args.get('page', 1))
 	table = TABLENAMES[sensor_id] if TABLENAMES.has_key(sensor_id) else None
 	return render_template("data.html", title = horse_id, menu = get_main_menu(),
 		sensor_menu = get_sensor_menu(horse_id), horse_id = horse_id,
-		tables = get_table(table, horse_id), google_gps_url = gps_url)
+		tables = get_table(table, page, horse_id), google_gps_url = gps_url,
+		table_page = page)
 
 @app.route('/status')
 def display_status():
@@ -58,7 +62,7 @@ def display_debug(horse_id):
 	print 'rendering debug data'
 	table = TABLENAMES['debug']
 	return render_template("debug.html", title = horse_id, menu = get_main_menu(),
-		horse_id = horse_id, tables = get_table(table, horse_id))
+		horse_id = horse_id, tables = get_table(table, 1, horse_id))
 
 # Helper functions
 
@@ -93,15 +97,23 @@ def get_sensor_menu(horse_id):
 	return sensor_menu
 
 # returns the items of the table where the addr64(horse_id) == table.row.addr64 
-def get_table(tablename, horse_id=None):
+def get_table(tablename, page = 1, horse_id=None):
 	table = []
 	sort_column = 'timestamp';
 	if(horse_id and tablename):
 		address = get_addr64(horse_id)
+		# find the number of rows for this query
+		count = query_db('SELECT COUNT(*) FROM ' + tablename +
+		' WHERE addr64=' + address )
+		count = count[0]['COUNT(*)']
+		last_row = count - page * int(TABLE_LENGTH)
+		print 'tbl cnt:', count, 'last row:', last_row
+		
 		sql_table = query_db('SELECT * FROM ' + tablename +
-		' WHERE addr64=' + address + 
-		' ORDER BY ' + sort_column + ' DESC ' +
-		' LIMIT ' + TABLE_LENGTH)
+		' WHERE addr64=' + address +
+		' AND ROWID <='  + str(last_row + int(TABLE_LENGTH)) +
+		' AND ROWID >=' + str(last_row) +
+		' ORDER BY ' + sort_column + ' DESC ')
 		if (sql_table):
 			table.append([tablename, sql_table[0].keys(), replace_timestamp(sql_table)])
 	elif(tablename):
@@ -149,8 +161,6 @@ def get_gps_locations(horse_id, count):
 			latitude = row['lat_h'] + row['lat_min']/60.0 + row['lat_s']/3600.0
 			latitude = latitude if row['lat_north'] else (latitude* -1)
 			markers.append({'longitude' : longitude, 'latitude' : latitude})
-			print longitude
-			print latitude
 	return markers[0:count]
 
 # creates a google maps url compatible string that contains markers to all
